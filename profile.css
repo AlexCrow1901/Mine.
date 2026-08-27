@@ -1,0 +1,98 @@
+/* ========================================================================
+   Mine · 个人中心样式
+   ------------------------------------------------------------------------
+   延续雾都冷调：头像编辑 / 昵称输入 / 功能行
+   ======================================================================== */
+
+/* ---------- 滚动容器 ---------- */
+.me-scroll {
+  padding-bottom: var(--sp-8);
+}
+
+/* ---------- 昵称编辑行 ---------- */
+.me-edit-row {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  align-items: center;
+}
+
+.me-name-input {
+  flex: 1;
+  height: 42px;
+  background: var(--glass-2);
+  border: 1px solid var(--bd-faint);
+  border-radius: var(--r-sm);
+  color: var(--t-primary);
+  font-size: 15px;
+  padding: 0 var(--sp-3);
+  transition: border-color var(--dur-fast) var(--ease-soft);
+  font-family: inherit;
+}
+
+.me-name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.me-name-input::placeholder {
+  color: var(--t-faint);
+}
+
+/* ---------- 头像区域已在 profile-hero / avatar-picker 中复用 ---------- */
+
+/* ---------- 个人中心特有的功能行间距微调 ---------- */
+.me-scroll .func-row {
+  cursor: pointer;
+}
+
+/* ---------- 头像大图展示（复用但微调） ---------- */
+.me-scroll .profile-hero {
+  padding-top: var(--sp-8);
+}
+
+.me-scroll .big-avatar {
+  width: 88px;
+  height: 88px;
+  font-size: 32px;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.me-scroll .big-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.me-scroll .cam-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--glass-3);
+  border: 1px solid var(--bd-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
+}
+
+.me-scroll .cam-badge svg {
+  width: 15px;
+  height: 15px;
+  color: var(--t-secondary);
+}
+
+/* ---------- 关于区域 ---------- */
+.me-scroll .group-head {
+  padding: var(--sp-4) var(--sp-5) var(--sp-2);
+  font-size: 12px;
+  color: var(--t-faint);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}

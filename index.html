@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f2326" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Mine</title>
+
+  <!-- 主题变量：修改此处即可整体换肤 -->
+  <link rel="stylesheet" href="css/theme.css?v6" />
+  <!-- 基础样式 + 雾霭背景层 -->
+  <link rel="stylesheet" href="css/base.css?v6" />
+  <!-- Home 页面布局 -->
+  <link rel="stylesheet" href="css/home.css?v6" />
+  <!-- 通用组件（图标雾面 / 面板 / 背景管理 / 滑块） -->
+  <link rel="stylesheet" href="css/components.css?v7" />
+  <!-- 通讯录页面（联系人列表 / 群聊） -->
+  <link rel="stylesheet" href="css/contacts.css?v9" />
+  <!-- 聊天页面（消息气泡 / 输入栏 / 字卡 / 会话列表） -->
+  <link rel="stylesheet" href="css/chat.css?v28" />
+  <!-- 陪伴页面（内容应用入口 / bento 网格） -->
+  <link rel="stylesheet" href="css/companion.css?v2" />
+  <link rel="stylesheet" href="css/profile.css?v1" />
+  <link rel="stylesheet" href="css/mail.css?v4" />
+  <link rel="stylesheet" href="css/treehole.css?v4" />
+  <!-- 心情电台（悬浮唱片 / 播放控制） -->
+  <link rel="stylesheet" href="css/radio.css?v2" />
+  <link rel="stylesheet" href="css/foodie.css?v3" />
+  <!-- 朋友圈（动态流 / 封面 / 九宫格 / 评论交互） -->
+  <link rel="stylesheet" href="css/moments.css?v2" />
+  <!-- 联系人朋友圈（字卡管理） -->
+  <link rel="stylesheet" href="css/contact-moments.css?v2" />
+  <!-- 全局通知角标 -->
+  <link rel="stylesheet" href="css/notify.css?v1" />
+</head>
+<body>
+
+  <!-- ===== 多层雾霭背景（见 base.css） ===== -->
+  <div class="bg-stack">
+    <div class="bg-layer bg-base"></div>
+    <div class="bg-layer bg-image"></div>
+    <div class="bg-layer bg-fog-tint"></div>
+    <div class="bg-layer bg-noise"></div>
+    <div class="bg-layer bg-vignette"></div>
+  </div>
+
+  <!-- ===== 沉浸式应用外壳 ===== -->
+  <main class="app-shell">
+
+    <!-- ============ Home 页面 ============ -->
+    <section class="page is-active" data-page="home">
+
+      <!-- 顶部状态区 -->
+      <header class="status-bar">
+        <span class="status-time" id="status-time">--:--</span>
+        <div class="status-indicators">
+          <span class="sig-dots"><i></i><i></i><i></i><i></i></span>
+          <span id="status-wifi"></span>
+          <span class="battery">
+            <span class="battery-body"><span class="battery-fill"></span></span>
+          </span>
+        </div>
+      </header>
+
+      <!-- 可滚动主体 -->
+      <div class="app-grid-wrap scroll">
+        <div class="greeting">
+          <div class="hello">你好</div>
+          <div class="date">—</div>
+        </div>
+
+        <!-- 搜索条 -->
+        <div class="search-pill" role="button" tabindex="0">
+          <span id="search-icon"></span>
+          <span>搜索应用…</span>
+        </div>
+
+        <!-- 应用图标网格（由 app.js 渲染） -->
+        <div class="app-grid" id="app-grid"></div>
+      </div>
+
+      <!-- 页面指示点 -->
+      <div class="page-dots"><i class="is-active"></i><i></i></div>
+
+      <!-- 底部 Dock -->
+      <nav class="dock">
+        <div class="dock-inner" id="dock-inner"></div>
+      </nav>
+    </section>
+
+    <!-- ============ 通用详情页（占位，由 app.js 注入） ============ -->
+    <section class="page" data-page="detail" id="page-detail"></section>
+
+    <!-- ============ 通讯录页（由 contacts.js 接管） ============ -->
+    <section class="page" data-page="contacts" id="page-contacts"></section>
+
+    <!-- ============ 聊天页（由 chat.js 接管） ============ -->
+    <section class="page" data-page="chat" id="page-chat"></section>
+
+    <!-- ============ 陪伴页（由 companion.js 接管） ============ -->
+    <section class="page" data-page="companion" id="page-companion"></section>
+
+    <!-- ============ 朋友圈页（由 moments.js 接管） ============ -->
+    <section class="page" data-page="moments" id="page-moments"></section>
+
+  </main>
+
+  <!-- ===== 脚本 ===== -->
+  <script src="js/utils.js?v8"></script>
+  <script src="js/notify.js?v1"></script>
+  <script src="js/icons.js?v16"></script>
+  <script src="js/background.js?v7"></script>
+  <script src="js/contacts.js?v17"></script>
+  <script src="js/chat.js?v28"></script>
+  <script src="js/companion.js?v7"></script>
+  <script src="js/profile.js?v2"></script>
+  <script src="js/mail.js?v7"></script>
+  <script src="js/treehole.js?v6"></script>
+  <script src="js/radio.js?v2"></script>
+  <script src="js/foodie.js?v3"></script>
+  <script src="js/moments.js?v2"></script>
+  <script src="js/contact-moments.js?v1"></script>
+  <script src="js/app.js?v9"></script>
+  <script>
+    // 状态栏 wifi 图标 / 搜索图标（等 icons.js 就绪后注入）
+    document.getElementById("status-wifi").innerHTML = MineIcons.svg("wifi", 16);
+    document.getElementById("search-icon").innerHTML = MineIcons.svg("search", 16);
+  </script>
+</body>
+</html>
