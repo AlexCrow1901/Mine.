@@ -11,7 +11,7 @@
 window.MineBackground = (function () {
   "use strict";
 
-  var ASSET = "assets/";
+  var ASSET = "";
   var STORE_KEY = "mine.bg.v1";
 
   // 预设列表
