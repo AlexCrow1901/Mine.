@@ -382,10 +382,12 @@ window.MineMail = (function () {
     var textCards = [];
     var emojiCards = [];
     allCards.forEach(function (card) {
-      if (isImageCard(card)) return;
-      if (isEmojiCard(card)) emojiCards.push(card);
-      else textCards.push(card);
-    });
+  var cardStr = String(card || "");
+  if (!cardStr) return;
+  if (isImageCard(cardStr)) return;
+  if (isEmojiCard(cardStr)) emojiCards.push(cardStr);
+  else textCards.push(cardStr);
+});
 
     // 组合池：文字字卡 + emoji 字卡
     var pool = textCards.concat(emojiCards);
@@ -445,7 +447,16 @@ window.MineMail = (function () {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-
+   
+/* 安全截断字符串（不截断 emoji 代理对） */
+  function safeSlice(str, maxLen) {
+    str = String(str || "");
+    if (str.length <= maxLen) return str;
+    var chars = Array.from(str);
+    if (chars.length <= maxLen) return str;
+    return chars.slice(0, maxLen).join("");
+  }
+   
   function fmtTime(ts) {
     var d = new Date(ts);
     var now = new Date();
@@ -808,7 +819,7 @@ window.MineMail = (function () {
           '<span class="mail-item-time">' + fmtTime(mail.time) + '</span>' +
         '</div>' +
         '<div class="mail-item-subject">' + escapeHtml(mail.subject || "(无主题)") + '</div>' +
-        '<div class="mail-item-preview">' + escapeHtml((mail.body || "").slice(0, 50)) + '</div>' +
+        '<div class="mail-item-preview">' + escapeHtml(safeSlice(mail.body || "", 50)) + '</div>' +
       '</div>' +
     '</div>';
 
