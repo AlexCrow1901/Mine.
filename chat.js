@@ -66,7 +66,44 @@ window.MineChat = (function () {
     loadChatFontColor();
   }
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(conversations)); } catch (e) {}
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(conversations));
+      return true;
+    } catch (e) {
+      _tryStripImageMessages();
+      return false;
+    }
+  }
+
+  function _tryStripImageMessages() {
+    try {
+      var allImages = [];
+      Object.keys(conversations).forEach(function (key) {
+        var msgs = conversations[key];
+        if (!Array.isArray(msgs)) return;
+        msgs.forEach(function (m, i) {
+          if (typeof m.text === "string" && m.text.indexOf("data:image/") === 0) {
+            allImages.push({ key: key, idx: i, size: m.text.length, msgId: m.id });
+          }
+        });
+      });
+      allImages.sort(function (a, b) { return a.size - b.size; });
+      for (var i = 0; i < allImages.length; i++) {
+        var item = allImages[i];
+        var msgs = conversations[item.key];
+        if (!msgs) continue;
+        for (var j = msgs.length - 1; j >= 0; j--) {
+          if (msgs[j].id === item.msgId) {
+            msgs.splice(j, 1);
+            break;
+          }
+        }
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify(conversations));
+          return;
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
   function saveUnread() {
     try { localStorage.setItem(UNREAD_KEY, JSON.stringify(unreadCounts)); } catch (e) {}
@@ -1101,9 +1138,9 @@ window.MineChat = (function () {
                 });
               }
             }
-            save();
-            // 未查看时增加未读计数（类微信机制）
-            if (!isViewingConv(curConvKey)) {
+            var _saved3 = save();
+            // 保存成功且未查看时才增加未读计数（避免通知显示但消息丢失）
+            if (_saved3 && !isViewingConv(curConvKey)) {
               incrementUnread(curConvKey);
               if (window.MineNotify) MineNotify.refreshBadges();
             }
@@ -1208,9 +1245,9 @@ window.MineChat = (function () {
         });
       }
     }
-    save();
-    // 未查看时增加未读计数
-    if (!isViewingConv(key)) {
+   var _saved = save();
+    // 保存成功且未查看时才增加未读计数（避免通知显示但消息丢失）
+    if (_saved && !isViewingConv(key)) {
       incrementUnread(key);
       if (window.MineNotify) MineNotify.refreshBadges();
     }
@@ -1246,9 +1283,9 @@ window.MineChat = (function () {
       // 无字卡 → 沉默占位
       msgs.push({ id: uid(), from: contact.id, text: "……", time: Date.now(), isEmpty: true, senderName: senderName, senderAvatar: senderAvatar });
     }
-    save();
-    // 未查看时增加未读计数（类微信机制）
-    if (!isViewingConv(key)) {
+    var _saved = save();
+    // 保存成功且未查看时才增加未读计数（避免通知显示但消息丢失）
+    if (_saved2 && !isViewingConv(key)) {
       incrementUnread(key);
       if (window.MineNotify) MineNotify.refreshBadges();
     }
