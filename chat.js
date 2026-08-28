@@ -792,9 +792,11 @@ window.MineChat = (function () {
       bubbleText = '<span class="msg-emoji">' + escapeHtml(msg.text) + '</span>';
     } else if (msg.isChoice) {
       bubbleText = renderChoiceText(msg);
+
     } else {
-      bubbleText = wrapText(msg.text, 12);
-    }
+      // 去掉强制每 N 字换行，让 CSS 自然换行，避免字间距异常
+      bubbleText = escapeHtml(msg.text).replace(/\n/g, "<br>");
+        }
 
     // 自动回复标记
     var autoTag = "";
