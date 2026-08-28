@@ -371,7 +371,14 @@ window.MineMail = (function () {
      从字符字卡 + emoji 字卡中随机选择组合，
      每条字卡之间用逗号、句号、感叹号、省略号或 emoji 字卡衔接 */
   function generateCardReply(recipient) {
+    // 确保联系人数据已加载（懒加载兼容）
+    if (C && C.loadData) C.loadData();
+
     var contact = C ? C.findContact(recipient.id) : null;
+    // ID 查找失败时，按名称兜底查找
+    if (!contact && recipient && recipient.name && C && C.findContactByName) {
+      contact = C.findContactByName(recipient.name);
+    }
     if (!contact || !contact.cards || contact.cards.length === 0) {
       return "（信已收到，暂无言以对。）";
     }
