@@ -498,19 +498,44 @@ window.MineProfile = (function () {
 
   /* ==================== 数据导出功能 ==================== */
 
-  /* 通用：下载文本文件 */
+  /* 通用：下载文本文件（兼容手机） */
   function downloadText(filename, text) {
-    var blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+    try {
+      var blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.style.position = "fixed";
+      a.style.left = "0";
+      a.style.top = "0";
+      a.style.width = "1px";
+      a.style.height = "1px";
+      a.style.opacity = "0";
+      document.body.appendChild(a);
+      // 兼容手机：先触发，再延迟较长时间清理
+      var ev = document.createEvent("MouseEvents");
+      ev.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+      a.dispatchEvent(ev);
+      setTimeout(function () {
+        try { document.body.removeChild(a); } catch (e) {}
+        try { URL.revokeObjectURL(url); } catch (e) {}
+      }, 2000);
+    } catch (e) {
+      // 兜底：用 data URL 方式
+      try {
+        var dataUrl = "data:text/plain;charset=utf-8," + encodeURIComponent(text);
+        var a2 = document.createElement("a");
+        a2.href = dataUrl;
+        a2.download = filename;
+        a2.style.display = "none";
+        document.body.appendChild(a2);
+        a2.click();
+        setTimeout(function () { try { document.body.removeChild(a2); } catch (e) {} }, 2000);
+      } catch (e2) {
+        alert("导出失败，请重试");
+      }
+    }
   }
 
   /* 通用：读取 localStorage JSON */
@@ -587,26 +612,83 @@ window.MineProfile = (function () {
       alert("没有信件记录可导出");
       return;
     }
-    var names = getContactNames();
     var text = "========== 次元信箱信件记录 ==========\n";
     text += "导出时间：" + fmtTime(Date.now()) + "\n\n";
 
-    var letters = data.letters || data.mails || [];
-    if (Array.isArray(letters)) {
-      letters.forEach(function (m, i) {
-        text += "--- 第 " + (i + 1) + " 封 ---\n";
-        text += "发件人：" + (m.fromName || names[m.contactId] || "未知") + "\n";
-        text += "收件人：" + (m.toName || "我") + "\n";
-        text += "时间：" + fmtTime(m.time || m.timestamp) + "\n";
-        text += "内容：" + (m.text || m.content || "") + "\n";
-        if (m.replies && m.replies.length > 0) {
-          text += "回复：\n";
-          m.replies.forEach(function (r) {
-            text += "  [" + fmtTime(r.time) + "] " + (r.fromName || "对方") + "：" + (r.text || "") + "\n";
-          });
+    // 收件箱（收到的信）
+    var inbox = data.inbox || [];
+    if (inbox.length > 0) {
+      text += "--- 收件箱（共 " + inbox.length + " 封）---\n\n";
+      inbox.forEach(function (m, i) {
+        text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+        if (m.from && m.from.name) text += "发件人：" + m.from.name + "\n";
+        text += "主题：" + (m.subject || "(无主题)") + "\n";
+        text += "正文：" + (m.body || "") + "\n";
+        text += "状态：" + (m.read ? "已读" : "未读") + (m.starred ? " ★" : "") + "\n\n";
+      });
+    }
+
+    // 发件箱（发出的信）
+    var outbox = data.outbox || [];
+    if (outbox.length > 0) {
+      text += "--- 发件箱（共 " + outbox.length + " 封）---\n\n";
+      outbox.forEach(function (m, i) {
+        text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+        if (m.to && m.to.length > 0) {
+          var toNames = m.to.map(function (t) { return t.name || "未知"; });
+          text += "收件人：" + toNames.join("、") + "\n";
         }
+        text += "主题：" + (m.subject || "(无主题)") + "\n";
+        text += "正文：" + (m.body || "") + "\n";
+        text += "状态：" + (m.status || "未知") + "\n\n";
+      });
+    }
+
+    // 草稿箱
+    var drafts = data.drafts || [];
+    if (drafts.length > 0) {
+      text += "--- 草稿箱（共 " + drafts.length + " 封）---\n\n";
+      drafts.forEach(function (m, i) {
+        text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+        if (m.to && m.to.length > 0) {
+          var toNames2 = m.to.map(function (t) { return t.name || "未知"; });
+          text += "收件人：" + toNames2.join("、") + "\n";
+        }
+        text += "主题：" + (m.subject || "(无主题)") + "\n";
+        text += "正文：" + (m.body || "") + "\n\n";
+      });
+    }
+
+    // 待送达/待回复的调度记录
+    var pending = readJSON("mine.mail.pending.v1");
+    if (pending && pending.length > 0) {
+      text += "--- 待处理信件（共 " + pending.length + " 封）---\n\n";
+      pending.forEach(function (p, i) {
+        text += "[" + (i + 1) + "] ";
+        if (p.recipient && p.recipient.name) text += "收件人：" + p.recipient.name + "\n";
+        text += "预计送达：" + fmtTime(p.deliveryTime) + "\n";
+        text += "预计回复：" + fmtTime(p.replyTime) + "\n";
+        text += "状态：" + (p.delivered ? "已送达" : "待送达") + " / " + (p.replied ? "已回复" : "待回复") + "\n";
+        if (p.originalSubject) text += "原主题：" + p.originalSubject + "\n";
         text += "\n";
       });
+    }
+
+    // 主动来信调度
+    var active = readJSON("mine.mail.active.v1");
+    if (active && active.length > 0) {
+      text += "--- 待送达主动来信（共 " + active.length + " 封）---\n\n";
+      active.forEach(function (p, i) {
+        text += "[" + (i + 1) + "] ";
+        if (p.contact && p.contact.name) text += "发件人：" + p.contact.name + "\n";
+        text += "预计送达：" + fmtTime(p.deliveryTime) + "\n";
+        text += "状态：" + (p.delivered ? "已送达" : "待送达") + "\n\n";
+      });
+    }
+
+    if (inbox.length === 0 && outbox.length === 0 && drafts.length === 0 && (!pending || pending.length === 0) && (!active || active.length === 0)) {
+      alert("没有信件记录可导出");
+      return;
     }
 
     downloadText("信件记录_" + Date.now() + ".txt", text);
@@ -614,24 +696,95 @@ window.MineProfile = (function () {
 
   /* 导出树洞记录 */
   function exportTreehole() {
-    var data = readJSON("mine.treehole.v2");
-    if (!data) {
+    var surveys = readJSON("mine.treehole.v2");
+    if (!surveys || (Array.isArray(surveys) && surveys.length === 0)) {
       alert("没有树洞记录可导出");
       return;
     }
+    var names = getContactNames();
     var text = "========== 树洞记录 ==========\n";
     text += "导出时间：" + fmtTime(Date.now()) + "\n\n";
 
-    var posts = Array.isArray(data) ? data : (data.list || data.posts || []);
-    if (Array.isArray(posts)) {
-      posts.forEach(function (p, i) {
-        text += "--- 第 " + (i + 1) + " 条 ---\n";
-        text += "时间：" + fmtTime(p.time || p.timestamp) + "\n";
-        text += "内容：" + (p.text || p.content || "") + "\n";
-        if (p.replies && p.replies.length > 0) {
-          text += "回复：\n";
-          p.replies.forEach(function (r) {
-            text += "  [" + fmtTime(r.time) + "] " + (r.text || r.content || "") + "\n";
+    var surveyList = Array.isArray(surveys) ? surveys : (surveys.list || []);
+    surveyList.forEach(function (s, i) {
+      text += "--- 问卷 " + (i + 1) + " ---\n";
+      text += "发送时间：" + fmtTime(s.sendTime) + "\n";
+      text += "状态：" + (s.status === "received" ? "已收到回复" : "等待回复中") + "\n";
+
+      // 验证问题
+      if (s.verifyQuestion) {
+        text += "验证问题：" + (s.verifyQuestion.question || "") + "\n";
+        if (s.verifyQuestion.options && s.verifyQuestion.options.length > 0) {
+          s.verifyQuestion.options.forEach(function (opt, oi) {
+            var mark = (oi === s.verifyQuestion.correctIndex) ? " ✓正确" : "";
+            text += "  " + String.fromCharCode(65 + oi) + ". " + opt + mark + "\n";
+          });
+        }
+      }
+
+      // 问卷题目
+      if (s.questions && s.questions.length > 0) {
+        text += "问卷题目（共 " + s.questions.length + " 题）：\n";
+        s.questions.forEach(function (q, qi) {
+          text += "  Q" + (qi + 1) + ". " + (q.question || "") + "\n";
+          if (q.options && q.options.length > 0) {
+            q.options.forEach(function (opt, oi) {
+              text += "    " + String.fromCharCode(65 + oi) + ". " + opt + "\n";
+            });
+          }
+        });
+      }
+
+      // 收件人
+      if (s.recipients && s.recipients.length > 0) {
+        var recipientNames = s.recipients.map(function (r) { return r.name || "未知"; });
+        text += "收件人：" + recipientNames.join("、") + "\n";
+      }
+
+      // 回复
+      if (s.responses && s.responses.length > 0) {
+        text += "回复（共 " + s.responses.length + " 份）：\n";
+        s.responses.forEach(function (r, ri) {
+          text += "  回复" + (ri + 1) + " — " + (r.contactName || names[r.contactId] || "未知") + "\n";
+          text += "    回复时间：" + fmtTime(r.responseTime) + "\n";
+          text += "    验证：" + (r.verifyCorrect ? "通过" : "未通过") + "\n";
+          if (r.answers && r.answers.length > 0) {
+            r.answers.forEach(function (a) {
+              var q = s.questions && s.questions[a.qIndex];
+              var qText = q ? q.question : ("问题" + (a.qIndex + 1));
+              var choiceText = q && q.options ? (q.options[a.choice] || "未选") : ("选项" + (a.choice + 1));
+              text += "    " + qText + " → " + choiceText + "\n";
+            });
+          }
+          text += "    状态：" + (r.valid ? "有效" : "无效") + "\n";
+        });
+      }
+
+      text += "\n";
+    });
+
+    // 待回复的调度记录
+    var pending = readJSON("mine.treehole.pending.v2");
+    if (pending && pending.length > 0) {
+      text += "--- 待回复问卷（共 " + pending.length + " 份）---\n\n";
+      pending.forEach(function (p, i) {
+        text += "[" + (i + 1) + "] ";
+        if (p.recipient && p.recipient.name) text += "收件人：" + p.recipient.name + "\n";
+        text += "预计回复：" + fmtTime(p.replyTime) + "\n";
+        text += "尝试次数：" + (p.attempts || 0) + "\n";
+        text += "状态：" + (p.resolved ? "已完成" : "待处理") + "\n\n";
+      });
+    }
+
+    // 模板
+    var templates = readJSON("mine.treehole.templates.v1");
+    if (templates && templates.length > 0) {
+      text += "--- 问卷模板（共 " + templates.length + " 个）---\n\n";
+      templates.forEach(function (t, i) {
+        text += "[" + (i + 1) + "] " + (t.name || "未命名模板") + "\n";
+        if (t.questions && t.questions.length > 0) {
+          t.questions.forEach(function (q, qi) {
+            text += "  Q" + (qi + 1) + ". " + (q.question || "") + " (" + (q.options ? q.options.length : 0) + " 个选项)\n";
           });
         }
         text += "\n";
@@ -644,7 +797,7 @@ window.MineProfile = (function () {
   /* 导出朋友圈记录 */
   function exportMoments() {
     var data = readJSON("mine.moments.v1");
-    if (!data) {
+    if (!data || (Array.isArray(data) && data.length === 0)) {
       alert("没有朋友圈记录可导出");
       return;
     }
@@ -652,43 +805,71 @@ window.MineProfile = (function () {
     var text = "========== 朋友圈记录 ==========\n";
     text += "导出时间：" + fmtTime(Date.now()) + "\n\n";
 
-    var posts = Array.isArray(data) ? data : (data.list || data.posts || []);
-    if (Array.isArray(posts)) {
-      posts.forEach(function (p, i) {
-        text += "--- 第 " + (i + 1) + " 条动态 ---\n";
-        text += "发布者：" + (p.authorName || names[p.contactId] || p.author || "未知") + "\n";
-        text += "时间：" + fmtTime(p.time || p.timestamp) + "\n";
-        text += "内容：" + (p.text || p.content || "") + "\n";
-        if (p.images && p.images.length > 0) {
-          text += "图片：" + p.images.length + " 张\n";
+    var posts = Array.isArray(data) ? data : [];
+    posts.forEach(function (p, i) {
+      text += "--- 动态 " + (i + 1) + " ---\n";
+      text += "发布者：" + (p.authorName || names[p.authorId] || "未知") + "\n";
+      text += "时间：" + fmtTime(p.timestamp) + "\n";
+      if (p.text) text += "内容：" + p.text + "\n";
+      if (p.images && p.images.length > 0) {
+        text += "图片：" + p.images.length + " 张\n";
+      }
+      if (p.location) text += "位置：" + p.location + "\n";
+
+      // 点赞（是数组 [{ id, name }]）
+      if (p.likes && p.likes.length > 0) {
+        var likeNames = p.likes.map(function (l) { return l.name || l.id || "未知"; });
+        text += "点赞（" + p.likes.length + "）：" + likeNames.join("、") + "\n";
+      }
+
+      // 评论（数组 [{ id, name, text, timestamp }]）
+      if (p.comments && p.comments.length > 0) {
+        text += "评论（" + p.comments.length + "）：\n";
+        p.comments.forEach(function (c) {
+          text += "  [" + fmtTime(c.timestamp) + "] " + (c.name || c.id || "未知") + "：" + (c.text || "") + "\n";
+        });
+      }
+
+      text += "\n";
+    });
+
+    // 封面图
+    var cover = localStorage.getItem("mine.moments.cover");
+    if (cover) text += "封面图：已设置\n\n";
+
+    // 联系人朋友圈互动记录
+    var interactions = readJSON("mine.moments.contactInteractions");
+    if (interactions) {
+      text += "--- 联系人朋友圈互动记录 ---\n\n";
+      Object.keys(interactions).forEach(function (postId) {
+        var acts = interactions[postId];
+        if (!acts) return;
+        // 从 postId 提取联系人ID
+        var contactId = "";
+        if (postId.indexOf("cm_") === 0) {
+          var rest = postId.substring(3);
+          var lastUnder = rest.lastIndexOf("_");
+          contactId = lastUnder > 0 ? rest.substring(0, lastUnder) : rest;
         }
-        if (p.comments && p.comments.length > 0) {
-          text += "评论：\n";
-          p.comments.forEach(function (c) {
-            text += "  " + (c.author || c.name || "未知") + "：" + (c.text || c.content || "") + "\n";
+        text += (names[contactId] || contactId || postId) + "：\n";
+        if (acts.likes && acts.likes.length > 0) {
+          var likeNames2 = acts.likes.map(function (l) { return l.name || l.id || "未知"; });
+          text += "  点赞（" + acts.likes.length + "）：" + likeNames2.join("、") + "\n";
+        }
+        if (acts.comments && acts.comments.length > 0) {
+          text += "  评论（" + acts.comments.length + "）：\n";
+          acts.comments.forEach(function (c) {
+            text += "    " + (c.name || "未知") + "：" + (c.text || "") + "\n";
           });
         }
-        if (p.likes && p.likes > 0) {
-          text += "点赞：" + p.likes + "\n";
+        if (acts.autoReplies && acts.autoReplies.replies && acts.autoReplies.replies.length > 0) {
+          text += "  自动回复（" + acts.autoReplies.replies.length + "）：\n";
+          acts.autoReplies.replies.forEach(function (r) {
+            text += "    " + (r.name || "对方") + "：" + (r.text || "") + "\n";
+          });
         }
         text += "\n";
       });
-    }
-
-    // 联系人朋友圈互动
-    var interactions = readJSON("mine.moments.contactInteractions");
-    if (interactions) {
-      text += "--- 联系人互动记录 ---\n";
-      try {
-        Object.keys(interactions).forEach(function (cid) {
-          var acts = interactions[cid];
-          text += names[cid] || cid;
-          if (acts.postedTime) text += " 发布于 " + fmtTime(acts.postedTime);
-          if (acts.comments) text += " 评论 " + acts.comments + " 次";
-          if (acts.likes) text += " 点赞 " + acts.likes + " 次";
-          text += "\n";
-        });
-      } catch (e) {}
     }
 
     downloadText("朋友圈记录_" + Date.now() + ".txt", text);
@@ -724,22 +905,61 @@ window.MineProfile = (function () {
     // 信件记录
     var mail = readJSON("mine.mail.v1");
     if (mail) {
-      var names2 = getContactNames();
       text += "\n========== 次元信箱信件记录 ==========\n\n";
-      var letters = mail.letters || mail.mails || [];
-      if (Array.isArray(letters)) {
-        letters.forEach(function (m, i) {
-          text += "--- 第 " + (i + 1) + " 封 ---\n";
-          text += "发件人：" + (m.fromName || names2[m.contactId] || "未知") + "\n";
-          text += "时间：" + fmtTime(m.time || m.timestamp) + "\n";
-          text += "内容：" + (m.text || m.content || "") + "\n";
-          if (m.replies && m.replies.length > 0) {
-            text += "回复：\n";
-            m.replies.forEach(function (r) {
-              text += "  [" + fmtTime(r.time) + "] " + (r.fromName || "对方") + "：" + (r.text || "") + "\n";
-            });
+      var inbox = mail.inbox || [];
+      var outbox = mail.outbox || [];
+      var drafts = mail.drafts || [];
+      if (inbox.length > 0) {
+        text += "--- 收件箱（共 " + inbox.length + " 封）---\n\n";
+        inbox.forEach(function (m, i) {
+          text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+          if (m.from && m.from.name) text += "发件人：" + m.from.name + "\n";
+          text += "主题：" + (m.subject || "(无主题)") + "\n";
+          text += "正文：" + (m.body || "") + "\n\n";
+        });
+      }
+      if (outbox.length > 0) {
+        text += "--- 发件箱（共 " + outbox.length + " 封）---\n\n";
+        outbox.forEach(function (m, i) {
+          text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+          if (m.to && m.to.length > 0) {
+            var toNames = m.to.map(function (t) { return t.name || "未知"; });
+            text += "收件人：" + toNames.join("、") + "\n";
           }
-          text += "\n";
+          text += "主题：" + (m.subject || "(无主题)") + "\n";
+          text += "正文：" + (m.body || "") + "\n";
+          text += "状态：" + (m.status || "未知") + "\n\n";
+        });
+      }
+      if (drafts.length > 0) {
+        text += "--- 草稿箱（共 " + drafts.length + " 封）---\n\n";
+        drafts.forEach(function (m, i) {
+          text += "[" + (i + 1) + "] " + fmtTime(m.time) + "\n";
+          text += "主题：" + (m.subject || "(无主题)") + "\n";
+          text += "正文：" + (m.body || "") + "\n\n";
+        });
+      }
+      // 待处理信件
+      var mailPending = readJSON("mine.mail.pending.v1");
+      if (mailPending && mailPending.length > 0) {
+        text += "--- 待处理信件（共 " + mailPending.length + " 封）---\n\n";
+        mailPending.forEach(function (p, i) {
+          text += "[" + (i + 1) + "] ";
+          if (p.recipient && p.recipient.name) text += "收件人：" + p.recipient.name + "\n";
+          text += "预计送达：" + fmtTime(p.deliveryTime) + "\n";
+          text += "预计回复：" + fmtTime(p.replyTime) + "\n";
+          text += "状态：" + (p.delivered ? "已送达" : "待送达") + " / " + (p.replied ? "已回复" : "待回复") + "\n\n";
+        });
+      }
+      // 主动来信
+      var mailActive = readJSON("mine.mail.active.v1");
+      if (mailActive && mailActive.length > 0) {
+        text += "--- 待送达主动来信（共 " + mailActive.length + " 封）---\n\n";
+        mailActive.forEach(function (p, i) {
+          text += "[" + (i + 1) + "] ";
+          if (p.contact && p.contact.name) text += "发件人：" + p.contact.name + "\n";
+          text += "预计送达：" + fmtTime(p.deliveryTime) + "\n";
+          text += "状态：" + (p.delivered ? "已送达" : "待送达") + "\n\n";
         });
       }
     }
@@ -747,17 +967,64 @@ window.MineProfile = (function () {
     // 树洞记录
     var treehole = readJSON("mine.treehole.v2");
     if (treehole) {
+      var names4 = getContactNames();
       text += "\n========== 树洞记录 ==========\n\n";
-      var posts = Array.isArray(treehole) ? treehole : (treehole.list || treehole.posts || []);
-      if (Array.isArray(posts)) {
-        posts.forEach(function (p, i) {
-          text += "--- 第 " + (i + 1) + " 条 ---\n";
-          text += "时间：" + fmtTime(p.time || p.timestamp) + "\n";
-          text += "内容：" + (p.text || p.content || "") + "\n";
-          if (p.replies && p.replies.length > 0) {
-            text += "回复：\n";
-            p.replies.forEach(function (r) {
-              text += "  [" + fmtTime(r.time) + "] " + (r.text || r.content || "") + "\n";
+      var surveyList = Array.isArray(treehole) ? treehole : [];
+      surveyList.forEach(function (s, i) {
+        text += "--- 问卷 " + (i + 1) + " ---\n";
+        text += "发送时间：" + fmtTime(s.sendTime) + "\n";
+        text += "状态：" + (s.status === "received" ? "已收到回复" : "等待回复中") + "\n";
+        if (s.verifyQuestion) {
+          text += "验证问题：" + (s.verifyQuestion.question || "") + "\n";
+        }
+        if (s.questions && s.questions.length > 0) {
+          text += "问卷题目：\n";
+          s.questions.forEach(function (q, qi) {
+            text += "  Q" + (qi + 1) + ". " + (q.question || "") + "\n";
+          });
+        }
+        if (s.recipients && s.recipients.length > 0) {
+          var rNames = s.recipients.map(function (r) { return r.name || "未知"; });
+          text += "收件人：" + rNames.join("、") + "\n";
+        }
+        if (s.responses && s.responses.length > 0) {
+          text += "回复（共 " + s.responses.length + " 份）：\n";
+          s.responses.forEach(function (r, ri) {
+            text += "  回复" + (ri + 1) + " — " + (r.contactName || names4[r.contactId] || "未知") + "\n";
+            text += "    时间：" + fmtTime(r.responseTime) + "\n";
+            text += "    验证：" + (r.verifyCorrect ? "通过" : "未通过") + "\n";
+            if (r.answers && r.answers.length > 0) {
+              r.answers.forEach(function (a) {
+                var q = s.questions && s.questions[a.qIndex];
+                var qText = q ? q.question : ("问题" + (a.qIndex + 1));
+                var choiceText = q && q.options ? (q.options[a.choice] || "未选") : ("选项" + (a.choice + 1));
+                text += "    " + qText + " → " + choiceText + "\n";
+              });
+            }
+          });
+        }
+        text += "\n";
+      });
+      // 待回复
+      var thPending = readJSON("mine.treehole.pending.v2");
+      if (thPending && thPending.length > 0) {
+        text += "--- 待回复问卷（共 " + thPending.length + " 份）---\n\n";
+        thPending.forEach(function (p, i) {
+          text += "[" + (i + 1) + "] ";
+          if (p.recipient && p.recipient.name) text += "收件人：" + p.recipient.name + "\n";
+          text += "预计回复：" + fmtTime(p.replyTime) + "\n";
+          text += "状态：" + (p.resolved ? "已完成" : "待处理") + "\n\n";
+        });
+      }
+      // 模板
+      var thTemplates = readJSON("mine.treehole.templates.v1");
+      if (thTemplates && thTemplates.length > 0) {
+        text += "--- 问卷模板（共 " + thTemplates.length + " 个）---\n\n";
+        thTemplates.forEach(function (t, i) {
+          text += "[" + (i + 1) + "] " + (t.name || "未命名") + "\n";
+          if (t.questions && t.questions.length > 0) {
+            t.questions.forEach(function (q, qi) {
+              text += "  Q" + (qi + 1) + ". " + (q.question || "") + "\n";
             });
           }
           text += "\n";
@@ -767,23 +1034,44 @@ window.MineProfile = (function () {
 
     // 朋友圈记录
     var moments = readJSON("mine.moments.v1");
-    if (moments) {
+    if (moments && Array.isArray(moments) && moments.length > 0) {
       var names3 = getContactNames();
       text += "\n========== 朋友圈记录 ==========\n\n";
-      var mPosts = Array.isArray(moments) ? moments : (moments.list || moments.posts || []);
-      if (Array.isArray(mPosts)) {
-        mPosts.forEach(function (p, i) {
-          text += "--- 第 " + (i + 1) + " 条动态 ---\n";
-          text += "发布者：" + (p.authorName || names3[p.contactId] || p.author || "未知") + "\n";
-          text += "时间：" + fmtTime(p.time || p.timestamp) + "\n";
-          text += "内容：" + (p.text || p.content || "") + "\n";
-          if (p.images && p.images.length > 0) text += "图片：" + p.images.length + " 张\n";
-          if (p.comments && p.comments.length > 0) {
-            text += "评论：\n";
-            p.comments.forEach(function (c) {
-              text += "  " + (c.author || c.name || "未知") + "：" + (c.text || c.content || "") + "\n";
-            });
+      moments.forEach(function (p, i) {
+        text += "--- 动态 " + (i + 1) + " ---\n";
+        text += "发布者：" + (p.authorName || names3[p.authorId] || "未知") + "\n";
+        text += "时间：" + fmtTime(p.timestamp) + "\n";
+        if (p.text) text += "内容：" + p.text + "\n";
+        if (p.images && p.images.length > 0) text += "图片：" + p.images.length + " 张\n";
+        if (p.likes && p.likes.length > 0) {
+          var ln = p.likes.map(function (l) { return l.name || l.id || "未知"; });
+          text += "点赞（" + p.likes.length + "）：" + ln.join("、") + "\n";
+        }
+        if (p.comments && p.comments.length > 0) {
+          text += "评论（" + p.comments.length + "）：\n";
+          p.comments.forEach(function (c) {
+            text += "  [" + fmtTime(c.timestamp) + "] " + (c.name || "未知") + "：" + (c.text || "") + "\n";
+          });
+        }
+        text += "\n";
+      });
+      // 互动记录
+      var interactions = readJSON("mine.moments.contactInteractions");
+      if (interactions) {
+        text += "--- 联系人朋友圈互动记录 ---\n\n";
+        Object.keys(interactions).forEach(function (postId) {
+          var acts = interactions[postId];
+          if (!acts) return;
+          var cid = "";
+          if (postId.indexOf("cm_") === 0) {
+            var rest = postId.substring(3);
+            var lu = rest.lastIndexOf("_");
+            cid = lu > 0 ? rest.substring(0, lu) : rest;
           }
+          text += (names3[cid] || cid || postId) + "：\n";
+          if (acts.likes && acts.likes.length > 0) text += "  点赞 " + acts.likes.length + " 次\n";
+          if (acts.comments && acts.comments.length > 0) text += "  评论 " + acts.comments.length + " 条\n";
+          if (acts.autoReplies && acts.autoReplies.replies && acts.autoReplies.replies.length > 0) text += "  自动回复 " + acts.autoReplies.replies.length + " 条\n";
           text += "\n";
         });
       }
@@ -837,4 +1125,3 @@ window.MineProfile = (function () {
     saveMe: saveMe
   };
 })();
-
