@@ -857,7 +857,7 @@ window.MineContacts = (function () {
         var processed = 0;
         var total = files.length;
         Array.prototype.forEach.call(files, function (f) {
-          window.MineUtils.compressImage(f, 400, 0.85, function (dataURL) {
+          window.MineUtils.compressImage(f, 280, 0.65, function (dataURL) {
             if (dataURL && c.cards.indexOf(dataURL) < 0) c.cards.push(dataURL);
             processed++;
             if (processed === total) {
@@ -2093,7 +2093,7 @@ window.MineContacts = (function () {
         var processed = 0;
         var total = files.length;
         Array.prototype.forEach.call(files, function (f) {
-          window.MineUtils.compressImage(f, 400, 0.85, function (dataURL) {
+          window.MineUtils.compressImage(f, 280, 0.65, function (dataURL) {
             if (dataURL && g.cards.indexOf(dataURL) < 0) g.cards.push(dataURL);
             processed++;
             if (processed === total) {
