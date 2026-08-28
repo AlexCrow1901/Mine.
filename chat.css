@@ -868,11 +868,16 @@
   padding: 9px 14px;
   font-size: 15px;
   line-height: 1.6;
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-align: left;
   border-radius: var(--r-md);
   position: relative;
   white-space: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
 }
+
 /* 对方气泡 · 冷调雾面玻璃 */
 .msg-bubble.is-them {
   background: var(--glass-2);
