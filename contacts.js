@@ -40,7 +40,38 @@ window.MineContacts = (function () {
 
   /* ---------------- 持久化 ---------------- */
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    } catch (e) {
+      _tryStripLargeImages();
+    }
+  }
+
+  function _tryStripLargeImages() {
+    try {
+      var allImages = [];
+      state.contacts.forEach(function (c) {
+        if (!c.cards) return;
+        c.cards.forEach(function (card) {
+          if (typeof card === "string" && card.indexOf("data:image/") === 0) {
+            allImages.push({ contactId: c.id, card: card, size: card.length });
+          }
+        });
+      });
+      allImages.sort(function (a, b) { return b.size - a.size; });
+      for (var i = 0; i < allImages.length; i++) {
+        var item = allImages[i];
+        var contact = state.contacts.find(function (c) { return c.id === item.contactId; });
+        if (contact && contact.cards) {
+          var idx = contact.cards.indexOf(item.card);
+          if (idx >= 0) contact.cards.splice(idx, 1);
+        }
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify(state));
+          return;
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
   function load() {
     try {
