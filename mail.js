@@ -242,12 +242,12 @@ window.MineMail = (function () {
     checkPendingReplies();
   }
 
-  /* 每24小时检测是否触发主动来信（10%概率） */
+  /* 每24小时检测是否触发主动来信（30%概率） */
   function checkActiveLetters() {
     var now = Date.now();
     var lastCheck = 0;
     try {
-      lastCheck = parseInt(localStorage.getItem(ACTIVE_CHECK_KEY) || "0", 10);
+      lastCheck = parseInt(localStorage.getItem(ACTIVE_CHECK_KEY) || "0", 30);
     } catch (e) {}
 
     if (now - lastCheck < 24 * 60 * 60 * 1000) return;
@@ -256,8 +256,8 @@ window.MineMail = (function () {
       localStorage.setItem(ACTIVE_CHECK_KEY, String(now));
     } catch (e) {}
 
-    // 10% 概率触发主动来信
-    if (Math.random() >= 0.10) return;
+    // 30% 概率触发主动来信
+    if (Math.random() >= 0.30) return;
 
     var contacts = getContacts();
     if (contacts.length === 0) return;
