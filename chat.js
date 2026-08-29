@@ -1871,11 +1871,86 @@ window.MineChat = (function () {
     MineNotify.register("chat", getNotifyCount, clearAllUnread);
   }
 
-  /* ---------------- 页面可见性变化监听（兜底：重新可见时消费待渲染队列） ---------------- */
+  /* ========================================================================
+     后台保活系统
+     ========================================================================
+     原理：
+     1. 静音音频循环播放 → 浏览器不会对正在播放音频的页面做节流（throttle）
+     2. 心跳定时器 → 定期检查待渲染消息队列，确保后台也能处理消息
+     3. 页面可见性监听 → 从后台切回前台时自动刷新当前会话
+  ------------------------------------------------------------------------ */
+
+  /* 静音音频元素（data URI，极短的静音 WAV） */
+  var keepAliveAudio = null;
+  var keepAliveReady = false;
+
+  function initKeepAliveAudio() {
+    if (keepAliveAudio) return;
+    try {
+      keepAliveAudio = document.createElement("audio");
+      keepAliveAudio.loop = true;
+      // 极短的静音 WAV 文件（base64 编码）
+      keepAliveAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      keepAliveAudio.volume = 0.001;
+      keepAliveAudio.setAttribute("playsinline", "");
+      keepAliveAudio.style.display = "none";
+      document.body.appendChild(keepAliveAudio);
+      keepAliveReady = true;
+    } catch (e) {
+      keepAliveReady = false;
+    }
+  }
+
+  /* 启动静音音频保活（需要用户首次交互后才能自动播放） */
+  function startKeepAlive() {
+    if (!keepAliveAudio) initKeepAliveAudio();
+    if (keepAliveAudio && keepAliveAudio.paused) {
+      var p = keepAliveAudio.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  }
+
+  /* 首次用户交互时启动保活（浏览器要求用户交互后才能播放音频） */
+  function onFirstInteraction() {
+    startKeepAlive();
+    document.removeEventListener("click", onFirstInteraction);
+    document.removeEventListener("touchstart", onFirstInteraction);
+    document.removeEventListener("keydown", onFirstInteraction);
+  }
+  document.addEventListener("click", onFirstInteraction);
+  document.addEventListener("touchstart", onFirstInteraction);
+  document.addEventListener("keydown", onFirstInteraction);
+
+  /* 心跳定时器：定期检查待渲染队列，确保后台也能处理消息 */
+  var heartbeatTimer = setInterval(function () {
+    // 处理待渲染队列
+    if (ctx.convKey) {
+      flushPendingRender();
+    }
+  }, 3000);
+
+  /* ---------------- 页面可见性变化监听（增强版） ---------------- */
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && ctx.convKey) {
-      // 延迟一点，确保页面完全激活
-      setTimeout(function () { flushPendingRender(); }, 50);
+    if (!document.hidden) {
+      // 页面重新可见：启动保活 + 消费待渲染队列 + 刷新当前会话
+      startKeepAlive();
+      // 消费待渲染队列
+      if (ctx.convKey) {
+        setTimeout(function () {
+          flushPendingRender();
+          // 重新渲染当前会话消息（确保后台添加的消息都能显示）
+          try {
+            if (msgContainer) renderMessages();
+          } catch (e) {}
+        }, 50);
+      }
+      // 刷新会话列表的未读标记
+      try {
+        if (window.MineNotify) MineNotify.refreshBadges();
+      } catch (e) {}
+    } else {
+      // 页面进入后台：确保音频在播放（防止节流）
+      startKeepAlive();
     }
   });
 
