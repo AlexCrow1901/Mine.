@@ -65,21 +65,24 @@
     <section class="page" data-page="companion" id="page-companion"></section>
     <section class="page" data-page="moments" id="page-moments"></section>
   </main>
-  <script src="utils.js?v8"></script>
-  <script src="notify.js?v1"></script>
-  <script src="icons.js?v16"></script>
-  <script src="background.js?v7"></script>
-  <script src="contacts.js?v20"></script>
-  <script src="chat.js?v39"></script>
-  <script src="companion.js?v7"></script>
-  <script src="profile.js?v5"></script>
-  <script src="mail.js?v10"></script>
-  <script src="treehole.js?v6"></script>
-  <script src="radio.js?v2"></script>
-  <script src="foodie.js?v3"></script>
-  <script src="moments.js?v2"></script>
-  <script src="contact-moments.js?v1"></script>
-  <script src="app.js?v9"></script>
+  <!-- ===== 脚本 ===== -->
+  <!-- storage.js 必须最先加载：拦截 localStorage，底层使用 IndexedDB 大容量存储 -->
+  <script src="js/storage.js?v1"></script>
+  <script src="js/utils.js?v8"></script>
+  <script src="js/notify.js?v1"></script>
+  <script src="js/icons.js?v16"></script>
+  <script src="js/background.js?v7"></script>
+  <script src="js/contacts.js?v20"></script>
+  <script src="js/chat.js?v39"></script>
+  <script src="js/companion.js?v7"></script>
+  <script src="js/profile.js?v6"></script>
+  <script src="js/mail.js?v10"></script>
+  <script src="js/treehole.js?v6"></script>
+  <script src="js/radio.js?v2"></script>
+  <script src="js/foodie.js?v3"></script>
+  <script src="js/moments.js?v3"></script>
+  <script src="js/contact-moments.js?v1"></script>
+  <script src="js/app.js?v9"></script>
   <script>
     document.getElementById("status-wifi").innerHTML = MineIcons.svg("wifi", 16);
     document.getElementById("search-icon").innerHTML = MineIcons.svg("search", 16);
