@@ -9,35 +9,22 @@
   <title>Mine</title>
 
   <!-- 主题变量：修改此处即可整体换肤 -->
-  <link rel="stylesheet" href="theme.css?v6" />
+  <link rel="stylesheet" href="css/theme.css?v6" />
   <!-- 基础样式 + 雾霭背景层 -->
-  <link rel="stylesheet" href="base.css?v6" />
+  <link rel="stylesheet" href="css/base.css?v6" />
   <!-- Home 页面布局 -->
-  <link rel="stylesheet" href="home.css?v6" />
+  <link rel="stylesheet" href="css/home.css?v6" />
   <!-- 通用组件（图标雾面 / 面板 / 背景管理 / 滑块） -->
-  <link rel="stylesheet" href="components.css?v7" />
+  <link rel="stylesheet" href="css/components.css?v7" />
   <!-- 通讯录页面（联系人列表 / 群聊） -->
-  <link rel="stylesheet" href="contacts.css?v9" />
+  <link rel="stylesheet" href="css/contacts.css?v9" />
   <!-- 聊天页面（消息气泡 / 输入栏 / 字卡 / 会话列表） -->
-  <link rel="stylesheet" href="chat.css?v30" />
+  <link rel="stylesheet" href="css/chat.css?v24" />
   <!-- 陪伴页面（内容应用入口 / bento 网格） -->
-  <link rel="stylesheet" href="companion.css?v2" />
-  <link rel="stylesheet" href="profile.css?v1" />
-  <link rel="stylesheet" href="mail.css?v4" />
-  <link rel="stylesheet" href="files.css?v1" />
-  <link rel="stylesheet" href="treehole.css?v4" />
-  <link rel="stylesheet" href="phone.css?v1" />
-  <!-- 心情电台（悬浮唱片 / 播放控制） -->
-  <link rel="stylesheet" href="radio.css?v2" />
-  <link rel="stylesheet" href="foodie.css?v3" />
-  <!-- 朋友圈（动态流 / 封面 / 九宫格 / 评论交互） -->
-  <link rel="stylesheet" href="moments.css?v2" />
-  <!-- 联系人朋友圈（字卡管理） -->
-  <link rel="stylesheet" href="contact-moments.css?v2" />
-  <!-- 全局通知角标 -->
-  <link rel="stylesheet" href="notify.css?v1" />
-  <!-- 奶油软新拟态主题（可选主题，通过 theme-manager.js 切换） -->
-  <link rel="stylesheet" href="theme-neumorphism.css?v1" />
+  <link rel="stylesheet" href="css/companion.css?v2" />
+  <link rel="stylesheet" href="css/profile.css?v1" />
+  <link rel="stylesheet" href="css/mail.css?v4" />
+  <link rel="stylesheet" href="css/treehole.css?v4" />
 </head>
 <body>
 
@@ -106,40 +93,23 @@
     <!-- ============ 陪伴页（由 companion.js 接管） ============ -->
     <section class="page" data-page="companion" id="page-companion"></section>
 
-    <!-- ============ 朋友圈页（由 moments.js 接管） ============ -->
-    <section class="page" data-page="moments" id="page-moments"></section>
-
   </main>
 
   <!-- ===== 脚本 ===== -->
-  <!-- storage.js 必须最先加载：拦截 localStorage，底层使用 IndexedDB 大容量存储 -->
-  <section class="page" data-page="phone" id="page-phone"></section>
-  <script src="storage.js?v2"></script>
-  <script src="utils.js?v8"></script>
-  <script src="notify.js?v1"></script>
-  <script src="icons.js?v16"></script>
-  <script src="background.js?v8"></script>
-  <script src="contacts.js?v20"></script>
-  <script src="chat.js?v40"></script>
-  <script src="companion.js?v7"></script>
-  <script src="profile.js?v6"></script>
-  <script src="mail.js?v10"></script>
-  <script src="treehole.js?v6"></script>
-  <script src="files.js?v1"></script>
-  <script src="radio.js?v2"></script>
-  <script src="foodie.js?v3"></script>
-  <script src="moments.js?v3"></script>
-  <script src="phone.js?v1"></script>
-  <script src="contact-moments.js?v1"></script>
-  <!-- 主题管理器（主题切换 + 小组件 + 拖拽） -->
-  <script src="theme-manager.js?v4"></script>
-  <script src="app.js?v9"></script>
+  <script src="js/utils.js?v8"></script>
+  <script src="js/icons.js?v11"></script>
+  <script src="js/background.js?v7"></script>
+  <script src="js/contacts.js?v15"></script>
+  <script src="js/chat.js?v24"></script>
+  <script src="js/companion.js?v4"></script>
+  <script src="js/profile.js?v2"></script>
+  <script src="js/mail.js?v6"></script>
+  <script src="js/treehole.js?v6"></script>
+  <script src="js/app.js?v9"></script>
   <script>
     // 状态栏 wifi 图标 / 搜索图标（等 icons.js 就绪后注入）
     document.getElementById("status-wifi").innerHTML = MineIcons.svg("wifi", 16);
     document.getElementById("search-icon").innerHTML = MineIcons.svg("search", 16);
-    // 主题管理器初始化
-    if (window.MineTheme) MineTheme.init();
   </script>
 </body>
 </html>
