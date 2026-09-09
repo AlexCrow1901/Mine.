@@ -1,0 +1,446 @@
+/* ========================================================================
+   Mine · 电话模块样式
+   ------------------------------------------------------------------------
+   分区清晰：主页 / 联系人选择 / 通话界面
+   文字颜色统一黑色，背景使用浅色调
+   ======================================================================== */
+
+/* ===== 移动端触摸优化 ===== */
+.phone-action-card,
+.phone-contact-row,
+.phone-call-minimize,
+.phone-btn-hangup,
+.phone-btn-decline,
+.phone-btn-answer,
+.phone-btn-done,
+.phone-start-group-btn,
+.nav-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ===== 主页面 ===== */
+.phone-main {
+  padding: 0 16px 24px;
+  background: #f0f0f0;
+  min-height: 100%;
+}
+
+.phone-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0 24px;
+}
+
+.phone-hero-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 119, 100, 0.15);
+  margin-bottom: 12px;
+}
+
+.phone-hero-icon svg {
+  opacity: 0.8;
+}
+
+.phone-hero-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #000;
+}
+
+.phone-hero-sub {
+  font-size: 13px;
+  color: #000;
+  margin-top: 4px;
+}
+
+/* ===== 操作卡片 ===== */
+.phone-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.phone-action-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.phone-action-card:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.phone-action-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 119, 100, 0.15);
+  flex-shrink: 0;
+}
+
+.phone-action-text {
+  flex: 1;
+}
+
+.phone-action-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #000;
+}
+
+.phone-action-desc {
+  font-size: 12px;
+  color: #000;
+  margin-top: 2px;
+}
+
+/* ===== 联系人选择列表 ===== */
+.phone-picker {
+  padding: 8px 16px 24px;
+  background: #f0f0f0;
+  min-height: 100%;
+}
+
+.phone-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.phone-contact-row:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.phone-contact-row.is-selected {
+  background: rgba(99, 119, 100, 0.15);
+}
+
+.phone-contact-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.phone-contact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.phone-contact-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-contact-status {
+  font-size: 12px;
+  color: #000;
+  margin-top: 2px;
+}
+
+.phone-call-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(100, 200, 100, 0.15);
+  flex-shrink: 0;
+}
+
+.phone-call-btn svg {
+  fill: rgba(60, 160, 60, 0.9);
+}
+
+.phone-check {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-check svg {
+  opacity: 0.4;
+}
+
+.phone-contact-row.is-selected .phone-check svg {
+  opacity: 1;
+  fill: #4a6b4d;
+}
+
+/* 开始群聊按钮 */
+.phone-start-group-btn {
+  color: #000;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.phone-start-group-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ===== 通话界面 ===== */
+.phone-call-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #e8e8e8;
+  position: relative;
+}
+
+.phone-call-screen.is-incoming {
+  background: #e8e8e8;
+}
+
+.phone-call-top {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+}
+
+.phone-call-minimize {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+/* ===== 通话主体 ===== */
+.phone-call-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px;
+}
+
+/* 单人头像 */
+.phone-call-avatar-single {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+}
+
+/* 群聊头像 */
+.phone-call-avatars {
+  display: flex;
+  align-items: center;
+  gap: -8px;
+}
+
+.phone-call-avatar-item {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #e8e8e8;
+  margin-left: -16px;
+}
+
+.phone-call-avatar-item:first-child {
+  margin-left: 0;
+}
+
+.phone-call-avatar-more {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.08);
+  color: #000;
+  font-size: 14px;
+  border: 3px solid #e8e8e8;
+  margin-left: -16px;
+}
+
+/* 通话名称 */
+.phone-call-name {
+  font-size: 22px;
+  font-weight: 600;
+  color: #000;
+  text-align: center;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 通话状态 */
+.phone-call-status {
+  font-size: 15px;
+  color: #000;
+  text-align: center;
+}
+
+.phone-status-calling {
+  animation: phone-pulse 1.5s ease-in-out infinite;
+}
+
+.phone-status-incoming {
+  color: #2a8c2a;
+  animation: phone-pulse 1s ease-in-out infinite;
+}
+
+.phone-status-active {
+  color: #2a8c2a;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone-status-ended {
+  color: #000;
+}
+
+@keyframes phone-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ===== 留言钩子 ===== */
+.phone-voicemail-hook {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  margin-top: 4px;
+}
+
+.phone-voicemail-icon {
+  opacity: 0.6;
+}
+
+.phone-voicemail-text {
+  font-size: 13px;
+  color: #000;
+}
+
+/* ===== 通话按钮 ===== */
+.phone-call-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 48px;
+  padding: 32px 0 48px;
+}
+
+.phone-call-buttons-incoming {
+  gap: 80px;
+}
+
+/* 挂断按钮（红色，图标旋转 135° 模拟挂断） */
+.phone-btn-hangup,
+.phone-btn-decline {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 70, 70, 0.85);
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+
+.phone-btn-hangup:active,
+.phone-btn-decline:active {
+  transform: scale(0.92);
+  background: rgba(200, 50, 50, 0.9);
+}
+
+.phone-btn-hangup svg,
+.phone-btn-decline svg {
+  transform: rotate(135deg);
+  fill: #fff;
+}
+
+/* 接听按钮（绿色） */
+.phone-btn-answer {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(60, 180, 80, 0.85);
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+  animation: phone-answer-pulse 1.5s ease-in-out infinite;
+}
+
+.phone-btn-answer:active {
+  transform: scale(0.92);
+  background: rgba(40, 160, 60, 0.9);
+}
+
+.phone-btn-answer svg {
+  fill: #fff;
+}
+
+@keyframes phone-answer-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(60, 180, 80, 0.3); }
+  50% { box-shadow: 0 0 0 12px rgba(60, 180, 80, 0); }
+}
+
+/* 完成按钮 */
+.phone-btn-done {
+  padding: 10px 32px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #000;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.phone-btn-done:active {
+  background: rgba(0, 0, 0, 0.1);
+}
