@@ -1,0 +1,72 @@
+if (window.MineMoments) {
+        MineNotify.register("moments", function () {
+          return MineMoments.getUnreadCount();
+        });
+      }
+
+      // companion 聚合 provider：次元信箱 + 深夜树洞的未读总数
+      // 不注册 onSeen 回调：用户打开陪伴页时不清除未读，
+      // 角标保留到用户点进具体子应用（time-mailbox / night-whispers）才清除
+      if (window.MineMail || window.MineTreeHole) {
+        MineNotify.register("companion",
+          function () {
+            var count = 0;
+            if (window.MineMail) count += MineMail.getUnreadCount();
+            if (window.MineTreeHole) count += MineTreeHole.getUnreadCount();
+            return count;
+          }
+        );
+      }
+
+      // 陪伴页子卡片单独 provider（卡片角标）
+      if (window.MineMail) {
+        MineNotify.register("time-mailbox",
+          function () { return MineMail.getUnreadCount(); },
+          function () { MineMail.clearUnread(); }
+        );
+      }
+      if (window.MineTreeHole) {
+        MineNotify.register("night-whispers",
+          function () { return MineTreeHole.getUnreadCount(); },
+          function () { MineTreeHole.clearUnread(); }
+        );
+      }
+
+      // 初始刷新角标
+      MineNotify.refreshBadges();
+    }
+  }
+
+  /* ---------------- 公共方法 ---------------- */
+  APP.goHome = goHome;
+  APP.switchPage = switchPage;
+  APP.openPlaceholder = openPlaceholder;
+  APP.refreshGreeting = updateGreeting;
+
+  // 个人中心 / 文件管理 / 电话页面钩子（链式：保存前一个 page handler）
+  var prevPage = APP.page;
+  APP.page = function (id) {
+    if (id === "me" && window.MineProfile) {
+      MineProfile.renderPage();
+      switchPage("detail");
+      return true;
+    }
+    if (id === "files" && window.MineFiles) {
+      MineFiles.renderPage();
+      switchPage("detail");
+      return true;
+    }
+    if (id === "phone" && window.MinePhone) {
+      MinePhone.renderPage();
+      switchPage("phone");
+      return true;
+    }
+    return prevPage ? prevPage(id) : false;
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
