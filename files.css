@@ -1,0 +1,18 @@
+/* ========================================================================
+   Mine · 文件管理样式
+   ------------------------------------------------------------------------
+   复用个人中心的 func-row / group-head 等组件样式
+   ======================================================================== */
+.me-scroll {
+  padding-bottom: var(--sp-8);
+}
+.me-scroll .func-row {
+  cursor: pointer;
+}
+.me-scroll .group-head {
+  padding: var(--sp-4) var(--sp-5) var(--sp-2);
+  font-size: 12px;
+  color: var(--t-faint);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
