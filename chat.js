@@ -28,6 +28,7 @@ window.MineChat = (function () {
        "group:g1":    [ ... ]
      } */
   var conversations = {};
+  var chatLoaded = false;   // 会话是否已从 localStorage 载入（主动消息触发前确保已载入）
 
   /* ---------------- 数据：未读计数 ----------------
      unreadCounts: { "contact:c1": 3, "group:g1": 1, ... } */
@@ -64,6 +65,11 @@ window.MineChat = (function () {
     // 加载会话背景图
     loadBg();
     loadChatFontColor();
+       // 加载会话背景图
+    loadBg();
+    loadChatFontColor();
+    chatLoaded = true;
+  }
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(conversations)); } catch (e) {}
@@ -1351,9 +1357,229 @@ window.MineChat = (function () {
   }
 
   /* ========================================================================
+     对方主动发消息
+     ------------------------------------------------------------------------
+     · 一对一：在联系人个人主页"回复设置 → 主动消息"开启并设定时间区间
+     · 群聊：每个成员按其个人设置独立计算（群 × 成员 各自计时）
+     · 触发时间：在 [最短间隔, 最长间隔] 内随机（1 分钟 ~ 12 小时）
+     · 触发时字卡条数：1条 60% / 2条 30% / 3条 7% / 3条以上 3%（抽 4~6 条）
+     · 每条字卡：90% 字符字卡 / 10% 图片字卡
+     · 字符字卡每条 15% 概率附加 1~3 条 emoji（73% / 20% / 7%，独立等概率抽取）
+     · 发送完毕后重新随机计时；倒计时持久化，刷新页面不重置
+     ======================================================================== */
+  var PROACTIVE_KEY = "mine.chat.proactive.v1";
+  var proactiveSched = {};    // { schedKey: 下次触发时间戳 }
+  var proactiveTimers = {};   // { schedKey: timeoutId }
+
+  function loadProactiveSched() {
+    try {
+      var raw = localStorage.getItem(PROACTIVE_KEY);
+      if (raw) proactiveSched = JSON.parse(raw) || {};
+    } catch (e) {}
+    if (!proactiveSched) proactiveSched = {};
+  }
+  function saveProactiveSched() {
+    try { localStorage.setItem(PROACTIVE_KEY, JSON.stringify(proactiveSched)); } catch (e) {}
+  }
+
+  /* 收集所有启用主动发消息的目标 */
+  function proactiveTargets() {
+    var targets = [];
+    if (!C || !C.getState) return targets;
+    var st = C.getState();
+    (st.contacts || []).forEach(function (c) {
+      if (c.proactiveOn !== true) return;
+      if (!c.cards || c.cards.length === 0) return;
+      targets.push({
+        schedKey: "contact:" + c.id,
+        convKey: "contact:" + c.id,
+        type: "contact",
+        contact: c
+      });
+    });
+    (st.groups || []).forEach(function (g) {
+      var gHasCards = g.cards && g.cards.length > 0;
+      (g.members || []).forEach(function (mid) {
+        var m = null;
+        for (var i = 0; i < (st.contacts || []).length; i++) {
+          if (st.contacts[i].id === mid) { m = st.contacts[i]; break; }
+        }
+        if (!m) return;
+        if (m.proactiveOn !== true) return;
+        if (!gHasCards && (!m.cards || m.cards.length === 0)) return;
+        targets.push({
+          schedKey: "group:" + g.id + "|" + m.id,
+          convKey: "group:" + g.id,
+          type: "group",
+          group: g,
+          member: m
+        });
+      });
+    });
+    return targets;
+  }
+
+  /* 在联系人的 [最短, 最长] 区间内随机取分钟数（1 分钟 ~ 12 小时） */
+  function proRandomMinutes(c) {
+    var min = parseInt(c.proactiveMin, 10); if (!(min >= 1)) min = 60;
+    var max = parseInt(c.proactiveMax, 10); if (!(max >= 1)) max = 720;
+    if (max < min) max = min;
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  /* 主动发消息字卡抽取：90% 字符字卡 / 10% 图片字卡（无字符卡时回退全池） */
+  function pickProactiveCard(pool) {
+    if (!pool || pool.length === 0) return null;
+    var images = filterImageCards(pool);
+    var texts = filterTextCards(pool);
+    if (images.length > 0 && Math.random() < 0.10) {
+      return images[Math.floor(Math.random() * images.length)];
+    }
+    if (texts.length > 0) return texts[Math.floor(Math.random() * texts.length)];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /* 为某个目标调度主动发消息（delayMs 毫秒后触发；persist 是否持久化倒计时） */
+  function scheduleProactive(t, delayMs, persist) {
+    if (proactiveTimers[t.schedKey]) {
+      clearTimeout(proactiveTimers[t.schedKey]);
+      delete proactiveTimers[t.schedKey];
+    }
+    if (persist !== false) {
+      proactiveSched[t.schedKey] = Date.now() + delayMs;
+      saveProactiveSched();
+    }
+    proactiveTimers[t.schedKey] = setTimeout(function () {
+      delete proactiveTimers[t.schedKey];
+      // 触发时重新校验目标仍有效（可能已被删除或已关闭主动消息）
+      var targets = proactiveTargets();
+      var fresh = null;
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i].schedKey === t.schedKey) { fresh = targets[i]; break; }
+      }
+      if (!fresh) {
+        delete proactiveSched[t.schedKey];
+        saveProactiveSched();
+        return;
+      }
+      fireProactive(fresh);
+    }, Math.max(500, delayMs));
+  }
+
+  /* 执行一次主动发消息（条数 60/30/7/3 概率；发送完毕后重新计时） */
+  function fireProactive(t) {
+    // 会话数据可能尚未从 localStorage 载入（页面刚打开即触发）
+    if (!chatLoaded) load();
+    var contact = t.type === "contact" ? t.contact : t.member;
+    var pool = (contact.cards || []).slice();
+    if (t.type === "group" && t.group && t.group.cards) pool = pool.concat(t.group.cards);
+    if (pool.length === 0) return;
+
+    // 条数：1条 60% / 2条 30% / 3条 7% / 3条以上 3%（4~6 条）
+    var r = Math.random();
+    var count = r < 0.60 ? 1 : (r < 0.90 ? 2 : (r < 0.97 ? 3 : 4 + Math.floor(Math.random() * 3)));
+
+    var msgs = conversations[t.convKey] || [];
+    conversations[t.convKey] = msgs;
+    var beforeLen = msgs.length;
+    var senderName = (contact && contact.name) ? contact.name : "未知";
+    var senderAvatar = (contact && contact.avatar) ? contact.avatar : null;
+
+    for (var i = 0; i < count; i++) {
+      var card = pickProactiveCard(pool);
+      if (!card) break;
+      msgs.push({
+        id: uid(),
+        from: contact.id,
+        text: card,
+        time: Date.now(),
+        isProactive: true,
+        senderName: senderName,
+        senderAvatar: senderAvatar
+      });
+      // 字符字卡每条 15% 概率附加 1~3 条 emoji（独立等概率抽取）
+      if (!isImageCard(card) && !isEmojiCard(card)) {
+        var emojis = pickEmojiAttachments(pool);
+        for (var j = 0; j < emojis.length; j++) {
+          msgs.push({
+            id: uid(),
+            from: contact.id,
+            text: emojis[j],
+            time: Date.now(),
+            isProactive: true,
+            senderName: senderName,
+            senderAvatar: senderAvatar
+          });
+        }
+      }
+    }
+
+    if (msgs.length > beforeLen) {
+      save();
+      // 未查看时增加未读计数（类微信机制）
+      if (!isViewingConv(t.convKey)) {
+        incrementUnread(t.convKey);
+      }
+      // 对方发来消息后，将我的消息标记为已读
+      markMyMessagesRead(t.convKey);
+      // 仅在查看该会话时才追加 DOM（主消息 + emoji 附件）
+      if (isViewingConv(t.convKey)) {
+        for (var k = beforeLen; k < msgs.length; k++) {
+          appendMessage(msgs[k]);
+        }
+      }
+    }
+
+    // 发送完毕后重新触发（重新随机计时）
+    scheduleProactive(t, proRandomMinutes(contact) * 60000, true);
+  }
+
+  /* 初始化 / 刷新主动发消息调度（应用启动、设置变更、打开会话列表时调用） */
+  function initProactive() {
+    loadProactiveSched();
+    if (C && C.loadData) C.loadData();
+    var now = Date.now();
+    var seen = {};
+    proactiveTargets().forEach(function (t) {
+      seen[t.schedKey] = true;
+      var contact = t.type === "contact" ? t.contact : t.member;
+      var nextTs = proactiveSched[t.schedKey];
+      if (!nextTs) {
+        // 新开启：在区间内随机调度
+        scheduleProactive(t, proRandomMinutes(contact) * 60000, true);
+      } else if (nextTs <= now) {
+        // 页面关闭期间已到期：短暂延迟后补发
+        scheduleProactive(t, 3000 + Math.floor(Math.random() * 12000), true);
+      } else {
+        // 沿用持久化的倒计时
+        scheduleProactive(t, nextTs - now, true);
+      }
+    });
+    // 清理已删除 / 已关闭目标的倒计时
+    Object.keys(proactiveSched).forEach(function (k) {
+      if (!seen[k]) {
+        delete proactiveSched[k];
+        if (proactiveTimers[k]) { clearTimeout(proactiveTimers[k]); delete proactiveTimers[k]; }
+      }
+    });
+    saveProactiveSched();
+  }
+
+  /* 页面重新可见时补查已到期的主动消息（后台页签计时可能被浏览器节流） */
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") initProactive();
+  });
+
+  /* ========================================================================
      会话列表（聊天应用主页）
      ======================================================================== */
-  function openConvList() {
+   function openConvList() {
+    load();
+    // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
+    if (C && C.loadData) C.loadData();
+    // 刷新主动发消息调度（拾取新建群等目标变化）
+    initProactive();
+function openConvList() {
     load();
     // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
     if (C && C.loadData) C.loadData();
@@ -1812,10 +2038,13 @@ window.MineChat = (function () {
     if (window.MineNotify) MineNotify.refreshBadges();
   }
 
-  /* ---------------- 注册 MineNotify provider ---------------- */
+    /* ---------------- 注册 MineNotify provider ---------------- */
   if (window.MineNotify) {
     MineNotify.register("chat", getNotifyCount, clearAllUnread);
   }
+
+  /* ---------------- 启动对方主动发消息调度 ---------------- */
+  initProactive();
 
   return {
     openContact: openContact,
@@ -1825,6 +2054,8 @@ window.MineChat = (function () {
     searchHistory: searchHistory,
     getTotalUnread: getTotalUnread,
     clearAllUnread: clearAllUnread,
-    refreshConvListBadges: openConvList
+    refreshConvListBadges: openConvList,
+    // 设置变更后刷新主动发消息调度（供 contacts.js 调用）
+    refreshProactive: function () { initProactive(); }
   };
 })();
