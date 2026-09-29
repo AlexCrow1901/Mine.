@@ -27,6 +27,13 @@ window.MinePhone = (function () {
     voiceMessageChance: 0.49,       // 呼出被挂断后附赠"语音留言"概率（49%，预留，后期植入）
     missedCardChance: 0.49,         // 未接来电后附赠"字卡留言"概率（49%，从联系人主页全部字卡随机抽）
     missedVoiceChance: 0.49,        // 未接来电后附赠"语音留言"概率（49%，预留，后期植入）
+    /* —— 挂断字卡留言的内部构成（后期可调） —— */
+    autoCardRatio: 0.70,            // 字卡留言中"自动回复字卡"占比（70%）；其余 30% 为普通文字字卡
+    normalCard1Chance: 0.75,        // 普通文字字卡：发 1 条的概率
+    normalCard2Chance: 0.20,        // 普通文字字卡：发 2 条的概率（剩 5% 为 3 条）
+    emojiAttachChance: 0.02,        // 每组字卡附赠 emoji 字卡的概率（2%）
+    emojiAttach2Chance: 0.20,       // 附赠时发 2 个 emoji 的概率（80% 为 1 个）
+
     connectedMinSec: 25,            // 接通后最短通话秒数
     connectedMaxSec: 150,           // 接通后最长通话秒数（超时自动挂断）
     /* —— 群聊电话模式（暂不设置，入口占位保留） —— */
@@ -253,15 +260,68 @@ window.MinePhone = (function () {
     }, delay));
   }
 
+  /* ---------- 字卡类型判断（与 chat.js 同一套规则） ---------- */
+  function isImageCard(card) {
+    return typeof card === "string" && card.indexOf("data:image/") === 0;
+  }
+  function isEmojiCard(card) {
+    if (typeof card !== "string" || card.length === 0 || isImageCard(card)) return false;
+    var stripped = card.replace(/[\uFE0F\u200D\u200C\u2640\u2642\u20E3\uFE0E]/g, "");
+    var chars = Array.from(stripped);
+    if (chars.length === 0 || chars.length > 4) return false;
+    return chars.every(function (ch) {
+      var code = ch.codePointAt(0);
+      return (code >= 0x1F300 && code <= 0x1FAFF) ||
+             (code >= 0x2600 && code <= 0x27BF) ||
+             (code >= 0x2B50 && code <= 0x2BFF) ||
+             (code >= 0x2300 && code <= 0x23FF);
+    });
+  }
+
+  /* ---------- 生成一组挂断留言字卡 ----------
+     · 70%：自动回复字卡（c.autoCards）随机抽 1 条（均等）
+     · 30%：普通文字字卡（c.cards 里非图片/非 emoji）抽 1~3 条（75/20/5）
+     · 每组 2% 概率附赠 1~2 个 emoji 字卡（80%/20%），从 autoCards+cards 全池 emoji 中抽 */
+  function buildHangupCards(c) {
+    var group = [];
+    var auto = (c && c.autoCards) || [];
+    var normal = (c && c.cards) || [];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    if (Math.random() < CONFIG.autoCardRatio) {
+      // 70%：自动回复字卡 1 条
+      if (auto.length) group.push(pick(auto));
+    } else {
+      // 30%：普通文字字卡 1~3 条
+      var textNormal = normal.filter(function (x) { return !isImageCard(x) && !isEmojiCard(x); });
+      if (textNormal.length) {
+        var r = Math.random();
+        var n = r < CONFIG.normalCard1Chance ? 1
+              : (r < CONFIG.normalCard1Chance + CONFIG.normalCard2Chance ? 2 : 3);
+        for (var i = 0; i < n; i++) group.push(pick(textNormal));
+      } else if (auto.length) {
+        group.push(pick(auto));   // 兜底：无普通文字卡时回退自动回复卡
+      }
+    }
+
+    // 附赠 emoji 字卡
+    if (group.length && Math.random() < CONFIG.emojiAttachChance) {
+      var emojiPool = auto.concat(normal).filter(isEmojiCard);
+      if (emojiPool.length) {
+        var m = Math.random() < (1 - CONFIG.emojiAttach2Chance) ? 1 : 2;
+        for (var j = 0; j < m; j++) group.push(pick(emojiPool));
+      }
+    }
+    return group;
+  }
+
   /* ---------- 对方挂断：49% 字卡留言 / 49% 语音留言（预留）/ 2% 不回复 ---------- */
   function counterpartHangup(c) {
     endCall();   // 结束并记录本次呼出（挂断）
     var r = Math.random();
     if (r < CONFIG.cardMessageChance) {
-      // 字卡留言：内容取自联系人主页"自动回复字卡"（c.autoCards）
-      var cards = (c && c.autoCards) || [];
-      var pick = cards.length ? cards[Math.floor(Math.random() * cards.length)] : null;
-      showCardMessage(c, pick);
+      // 字卡留言：按 buildHangupCards 规则生成一组字卡
+      showCardMessage(c, buildHangupCards(c));
     } else if (r < CONFIG.cardMessageChance + CONFIG.voiceMessageChance) {
       // 语音留言：预留（后期植入）
       showVoiceMessage(c);
@@ -269,6 +329,7 @@ window.MinePhone = (function () {
       showToast("对方挂断了电话");
     }
   }
+
 
   /* ---------- 留言弹层（字卡 / 语音，样式复用 sheet + phone-reserved） ---------- */
   function showMessageSheet(title, c, descHtml) {
@@ -308,20 +369,26 @@ window.MinePhone = (function () {
     });
   }
 
-  /* 字卡留言：内容取自联系人主页"自动回复字卡"（c.autoCards） */
-  function showCardMessage(c, card) {
-    var desc;
-    if (card == null) {
-      desc = "对方挂断了电话，没有留下字卡。";
-    } else if (/^data:image\//i.test(card) ||
-               /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(card)) {
-      desc = '<img src="' + card +
-        '" style="max-width:100%;max-height:180px;border-radius:12px;display:block;margin:6px auto;" />';
-    } else {
-      desc = esc(card);
+  /* 字卡留言：cards 为字符串数组（一组字卡，可含文字 / emoji / 图片） */
+  function showCardMessage(c, cards) {
+    if (!cards || !cards.length) {
+      showMessageSheet("字卡留言", c, "对方挂断了电话，没有留下字卡。");
+      return;
     }
-    showMessageSheet("字卡留言", c, desc);
+    var html = cards.map(function (card) {
+      if (isImageCard(card) ||
+          /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(card)) {
+        return '<img src="' + card +
+          '" style="max-width:100%;max-height:160px;border-radius:12px;display:block;margin:6px auto;" />';
+      }
+      if (isEmojiCard(card)) {
+        return '<div style="font-size:26px;text-align:center;margin:4px 0;">' + esc(card) + '</div>';
+      }
+      return '<div style="padding:5px 0;">' + esc(card) + '</div>';
+    }).join("");
+    showMessageSheet("字卡留言", c, html);
   }
+
 
   /* 语音留言：预留占位（后期植入） */
   function showVoiceMessage(c) {
@@ -355,7 +422,7 @@ window.MinePhone = (function () {
       // 字卡留言：从联系人主页"自动回复字卡"中随机抽一张
       var cards = (c && c.autoCards) || [];
       var pick = cards.length ? cards[Math.floor(Math.random() * cards.length)] : null;
-      showCardMessage(c, pick);
+        showCardMessage(c, pick ? [pick] : null);   
     } else if (r < CONFIG.missedCardChance + CONFIG.missedVoiceChance) {
       // 语音留言：预留（后期植入）
       showVoiceMessage(c);
