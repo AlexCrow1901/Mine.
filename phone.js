@@ -5,7 +5,8 @@
    · 主动来电：每个联系人独立调度，每小时一次抽取机会，触发概率 0.5%
    · 呼出电话：对方 2% 概率直接挂断；挂断后 49% 附字卡留言（取自该联系人
      主页"自动回复字卡"内容）/ 49% 附语音留言（预留，后期植入）/ 2% 不回复
-   · 群聊电话：暂不设置（入口占位保留）
+   · 群聊电话：任意成员可发起，邀请任意数量成员；通话名单含我时，
+     每个成员按一对一通话规则独立结算；纯成员间通话仅记录（留钩子）
    通话记录持久化（localStorage，配合 storage.js 大容量存储）
    概率全部集中在顶部 CONFIG，后期可随时调整。
    ======================================================================== */
@@ -43,8 +44,13 @@ window.MinePhone = (function () {
 
     connectedMinSec: 25,            // 接通后最短通话秒数
     connectedMaxSec: 150,           // 接通后最长通话秒数（超时自动挂断）
-    /* —— 群聊电话模式（暂不设置，入口占位保留） —— */
-    groupCallEnabled: false
+    /* —— 群聊电话 —— */
+    groupCallEnabled: true,         // 群聊电话总开关
+    groupInvite1Chance: 0.10,       // 群成员发起通话时邀请 1 人的概率
+    groupInvite2Chance: 0.35,       // 邀请 2 人的概率（剩余 55% 为 3 人及以上）
+    groupMaxExtraInvitees: 2,       // "3 人及以上"时在 3 人基础上再随机增加的人数（0~2，实际不超过可选成员数）
+    groupRollMinutes: 60,           // 每个群每多少分钟抽取一次"成员发起通话"
+    groupCallChance: 0.005          // 每次抽取某成员发起群通话的概率（0.5%，与一对一来电一致）
   };
 
   var STORE_KEY = "mine.phone.log.v1";
@@ -77,10 +83,16 @@ window.MinePhone = (function () {
   var timerInt = null;
   var timers = [];       // 收集所有延时器，便于统一清理
 
+  /* 群通话状态（与一对一互斥：一方进行中另一方不可发起） */
+  var groupCall = null;      // { groupId, invitees:[{id,state,connectedAt}], startedAt, connectedAt, msgs:[] }
+  var groupOverlayEl = null;
+  var groupTimerInt = null;
+
   function clearTimers() {
     timers.forEach(function (t) { clearTimeout(t); });
     timers = [];
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
+    if (groupTimerInt) { clearInterval(groupTimerInt); groupTimerInt = null; }
   }
 
   function esc(s) {
@@ -208,7 +220,6 @@ window.MinePhone = (function () {
     }, CONFIG.connectedHangupCheckSec * 1000));
   }
 
-
   /* 结束通话（notice 可选，结束时弹 toast） */
   function endCall(notice) {
     if (!active) return;
@@ -262,7 +273,7 @@ window.MinePhone = (function () {
 
   /* ==================== 呼出电话 ==================== */
   function callContact(contactId) {
-    if (active) { showToast("通话中，请先挂断"); return; }
+    if (active || groupCall) { showToast("通话中，请先挂断"); return; }
     var c = findContact(contactId);
     if (!c) return;
 
@@ -352,7 +363,6 @@ window.MinePhone = (function () {
     }
   }
 
-
   /* ---------- 留言弹层（字卡 / 语音，样式复用 sheet + phone-reserved） ---------- */
   function showMessageSheet(title, c, descHtml) {
     var ov = document.createElement("div");
@@ -391,24 +401,26 @@ window.MinePhone = (function () {
     });
   }
 
+  /* 单张字卡渲染（字卡留言 / 群通话留言共用） */
+  function cardToHtml(card) {
+    if (isImageCard(card) ||
+        /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(card)) {
+      return '<img src="' + card +
+        '" style="max-width:100%;max-height:160px;border-radius:12px;display:block;margin:6px auto;" />';
+    }
+    if (isEmojiCard(card)) {
+      return '<div style="font-size:26px;text-align:center;margin:4px 0;">' + esc(card) + '</div>';
+    }
+    return '<div style="padding:5px 0;">' + esc(card) + '</div>';
+  }
+
   /* 字卡留言：cards 为字符串数组（一组字卡，可含文字 / emoji / 图片） */
   function showCardMessage(c, cards) {
     if (!cards || !cards.length) {
       showMessageSheet("字卡留言", c, "对方挂断了电话，没有留下字卡。");
       return;
     }
-    var html = cards.map(function (card) {
-      if (isImageCard(card) ||
-          /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(card)) {
-        return '<img src="' + card +
-          '" style="max-width:100%;max-height:160px;border-radius:12px;display:block;margin:6px auto;" />';
-      }
-      if (isEmojiCard(card)) {
-        return '<div style="font-size:26px;text-align:center;margin:4px 0;">' + esc(card) + '</div>';
-      }
-      return '<div style="padding:5px 0;">' + esc(card) + '</div>';
-    }).join("");
-    showMessageSheet("字卡留言", c, html);
+    showMessageSheet("字卡留言", c, cards.map(cardToHtml).join(""));
   }
 
   /* 语音字卡池：联系人朋友圈字卡中 type=audio 的 content（audio dataURL） */
@@ -457,7 +469,7 @@ window.MinePhone = (function () {
 
   /* ==================== 呼入电话 ==================== */
   function receiveCall(contactId) {
-    if (active) return;   // 忙线：不打断当前通话
+    if (active || groupCall) return;   // 忙线：不打断当前通话
     var c = findContact(contactId);
     if (!c) return;
 
@@ -489,28 +501,54 @@ window.MinePhone = (function () {
       showToast("未接来电 · " + (c ? c.name : ""));
     }
   }
- 
+     /* ==================== 群聊电话 ====================
+     · 群内任意成员均可发起，邀请任意数量成员
+     · 我发起：被邀请成员各自独立按"一对一通话"规则结算
+       （2% 接通前挂断 → 49% 字卡留言 / 49% 语音留言 / 2% 无留言；否则接通）
+     · 其他成员发起：邀请 1 人 10% / 2 人 35% / 3 人及以上 55%
+       - 名单含我 → 走一对一呼入流程（响铃/接听/未接留言规则一致）
+       - 纯成员间通话 → 仅记录（钩子 memberToMemberCall，后期扩展） */
+  function findGroup(id) {
+    var st = (window.MineContacts && MineContacts.getState)
+      ? MineContacts.getState() : null;
+    var gs = (st && st.groups) || [];
+    for (var i = 0; i < gs.length; i++) if (gs[i].id === id) return gs[i];
+    return null;
+  }
 
-  /* ==================== 群聊电话模式（暂不设置，入口占位保留） ==================== */
+  /* ---------- 发起入口：选择群成员（任意数量） ---------- */
   function openGroupCall(groupId) {
-    var g = (window.MineContacts && MineContacts.findGroup)
-      ? MineContacts.findGroup(groupId) : null;
-    var name = g ? g.name : "群聊";
+    if (!CONFIG.groupCallEnabled) return;
+    if (active || groupCall) { showToast("通话中，请先挂断"); return; }
+    var g = findGroup(groupId);
+    if (!g) return;
+    var members = (g.members || []).map(findContact).filter(Boolean);
+    if (members.length === 0) { showToast("群里还没有可邀请的成员"); return; }
+
+    var rows = members.map(function (m) {
+      var av = (window.MineContacts && MineContacts.avatarHTML)
+        ? MineContacts.avatarHTML(m, 40, "")
+        : '<div class="avatar">' + esc((m.name || "?").charAt(0)) + '</div>';
+      return '<div class="contact-row" role="button" tabindex="0" data-pick="' + m.id + '">' +
+        av +
+        '<div class="contact-info"><span class="contact-name">' + esc(m.name) + '</span></div>' +
+        '<span class="pick-check" data-check="' + m.id + '" style="width:22px;height:22px;border-radius:50%;' +
+          'border:1px solid rgba(180,190,200,.5);display:inline-block;flex:0 0 auto;transition:background .15s;"></span>' +
+        '</div>';
+    }).join("");
 
     var ov = document.createElement("div");
     ov.className = "sheet-overlay";
     ov.innerHTML =
       '<div class="sheet">' +
         '<div class="sheet-handle"></div>' +
-        '<div class="sheet-head"><h2>群电话模式</h2>' +
+        '<div class="sheet-head"><h2>发起群电话</h2>' +
           '<button class="sheet-close" data-close="1">' + MineIcons.svg("close", 20) + '</button></div>' +
         '<div class="sheet-body">' +
-          '<div class="phone-reserved">' +
-            '<div class="phone-reserved-icon">' + MineIcons.svg("users", 26) + '</div>' +
-            '<div class="phone-reserved-title">' + esc(name) + ' · 群电话</div>' +
-            '<div class="phone-reserved-desc">群聊电话模式已预留入口，<br>具体规则与交互将在后期版本开放。</div>' +
-            '<button class="btn btn-primary" data-close="1">知道了</button>' +
-          '</div>' +
+          '<div class="phone-reserved-desc" style="margin-bottom:8px;">选择任意数量成员发起通话 · 每人独立按一对一电话规则接听或挂断</div>' +
+          rows +
+          '<button class="btn btn-primary" id="gc-start" style="margin-top:10px;width:100%;" disabled>' +
+            '邀请 0 位成员</button>' +
         '</div>' +
       '</div>';
 
@@ -521,13 +559,275 @@ window.MinePhone = (function () {
       if (sheet) sheet.classList.add("is-open");
     });
 
+    var picked = {};
+    var startBtn = ov.querySelector("#gc-start");
+    function refreshStart() {
+      var n = Object.keys(picked).length;
+      startBtn.textContent = "邀请 " + n + " 位成员";
+      startBtn.disabled = n === 0;
+    }
     ov.addEventListener("click", function (e) {
       var closeHit = (e.target === ov) ||
         (e.target && e.target.closest && e.target.closest("[data-close]"));
       if (closeHit) {
         ov.classList.remove("is-open");
         setTimeout(function () { ov.remove(); }, 300);
+        return;
       }
+      var row = (e.target && e.target.closest) ? e.target.closest("[data-pick]") : null;
+      if (row) {
+        var id = row.getAttribute("data-pick");
+        if (picked[id]) {
+          delete picked[id];
+        } else {
+          picked[id] = true;
+        }
+        var chk = row.querySelector(".pick-check");
+        if (chk) chk.style.background = picked[id] ? "rgba(159,180,199,.85)" : "transparent";
+        refreshStart();
+        return;
+      }
+      if (e.target.closest && e.target.closest("#gc-start")) {
+        var ids = Object.keys(picked);
+        if (!ids.length) return;
+        ov.classList.remove("is-open");
+        setTimeout(function () {
+          ov.remove();
+          startGroupCall(g, ids);
+        }, 200);
+      }
+    });
+  }
+
+  /* ---------- 我发起的群通话：每位被邀请成员独立结算 ---------- */
+  function startGroupCall(g, ids) {
+    if (active || groupCall) { showToast("通话中，请先挂断"); return; }
+    var invitees = ids.map(function (id) {
+      return { id: id, state: "ringing", connectedAt: 0 };
+    });
+
+    groupCall = { groupId: g.id, invitees: invitees, startedAt: Date.now(), connectedAt: 0, msgs: [] };
+    groupOverlayEl = buildGroupOverlay(g, invitees);
+
+    invitees.forEach(function (p) {
+      var c = findContact(p.id);
+      // 随机响铃后独立结算：2% 接通前挂断，否则接通（与一对一呼出一致）
+      var delay = Math.max(900, Math.random() * CONFIG.answerMaxSec * 1000);
+      timers.push(setTimeout(function () {
+        if (!groupCall) return;
+        var pp = null;
+        for (var i = 0; i < groupCall.invitees.length; i++) {
+          if (groupCall.invitees[i].id === p.id) { pp = groupCall.invitees[i]; break; }
+        }
+        if (!pp || pp.state !== "ringing") return;
+        if (Math.random() < CONFIG.hangupChance) {
+          // 接通前挂断 → 按一对一规则排队留言（钩子点：后期可替换群聊专属规则）
+          pp.state = "left";
+          queueGroupHangupMessage(c);
+          updateGroupParticipant(p.id, "已挂断");
+          checkGroupCallAllLeft();
+        } else {
+          pp.state = "connected";
+          pp.connectedAt = Date.now();
+          if (!groupCall.connectedAt) {
+            groupCall.connectedAt = Date.now();
+            startGroupTimer();
+          }
+          updateGroupParticipant(p.id, "已接通");
+          // 接通后随机时长自动离开（与一对一"通话结束"一致，不留留言）
+          var dur = CONFIG.connectedMinSec +
+            Math.random() * (CONFIG.connectedMaxSec - CONFIG.connectedMinSec);
+          timers.push(setTimeout(function () {
+            if (!groupCall) return;
+            var q = null;
+            for (var i = 0; i < groupCall.invitees.length; i++) {
+              if (groupCall.invitees[i].id === p.id) { q = groupCall.invitees[i]; break; }
+            }
+            if (!q || q.state !== "connected") return;
+            q.state = "left";
+            updateGroupParticipant(p.id, "已挂断");
+            checkGroupCallAllLeft();
+          }, dur * 1000));
+        }
+      }, delay));
+    });
+  }
+
+  /* ---------- 群通话界面 ---------- */
+  function buildGroupOverlay(g, invitees) {
+    var I2 = window.MineIcons;
+    var rows = invitees.map(function (p) {
+      var c = findContact(p.id);
+      var av = (window.MineContacts && MineContacts.avatarHTML)
+        ? MineContacts.avatarHTML(c, 34, "")
+        : '<div class="avatar">' + esc((c && c.name || "?").charAt(0)) + '</div>';
+      return '<div class="gc-row" data-pid="' + p.id + '" style="display:flex;align-items:center;gap:10px;padding:6px 0;">' +
+        '<div style="flex:0 0 auto;">' + av + '</div>' +
+        '<div style="flex:1 1 auto;text-align:left;font-size:14px;opacity:.85;">' + esc(c ? c.name : "未知") + '</div>' +
+        '<div class="gc-state" style="flex:0 0 auto;font-size:12px;opacity:.6;">呼叫中…</div>' +
+        '</div>';
+    }).join("");
+
+    var ov = document.createElement("div");
+    ov.className = "phone-overlay";
+    ov.innerHTML =
+      '<div class="phone-screen">' +
+        '<div class="phone-top"><span class="phone-brand">Mine · 群电话</span></div>' +
+        '<div class="phone-stage">' +
+          '<div class="phone-avatar-wrap">' +
+            '<span class="phone-ring r1"></span>' +
+            '<span class="phone-ring r2"></span>' +
+            '<div class="avatar avatar-gen phone-avatar" style="display:flex;align-items:center;justify-content:center;">' +
+              I2.svg("users", 40) + '</div>' +
+          '</div>' +
+          '<div class="phone-name">' + esc(g.name) + '</div>' +
+          '<div class="phone-state" id="phone-state">呼叫中…</div>' +
+          '<div class="phone-timer" id="phone-timer">00:00</div>' +
+          '<div class="gc-list" style="max-height:170px;overflow-y:auto;width:100%;padding:0 26px;box-sizing:border-box;">' +
+            rows +
+          '</div>' +
+        '</div>' +
+        '<div class="phone-controls">' +
+          '<button class="phone-ctl" data-ctl="mute" title="静音">' + I2.svg("mic", 22) + '</button>' +
+          '<button class="phone-ctl is-danger" data-ctl="hangup" title="挂断">' + I2.svg("phoneOff", 22) + '</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add("is-open"); });
+    ov.addEventListener("click", function (e) {
+      var btn = (e.target && e.target.closest) ? e.target.closest("[data-ctl]") : null;
+      if (!btn) return;
+      var ctl = btn.getAttribute("data-ctl");
+      if (ctl === "mute") {
+        var muted = btn.classList.toggle("is-muted");
+        if (window.MineIcons) btn.innerHTML = MineIcons.svg(muted ? "micOff" : "mic", 22);
+      } else if (ctl === "hangup") {
+        endGroupCall();
+      }
+    });
+    return ov;
+  }
+
+  function updateGroupParticipant(id, text) {
+    if (!groupOverlayEl) return;
+    var row = groupOverlayEl.querySelector('[data-pid="' + id + '"]');
+    if (row) {
+      var st = row.querySelector(".gc-state");
+      if (st) st.textContent = text;
+    }
+    refreshGroupStateText();
+  }
+
+  function refreshGroupStateText() {
+    if (!groupCall || !groupOverlayEl) return;
+    var connected = groupCall.invitees.filter(function (p) { return p.state === "connected"; }).length;
+    var left = groupCall.invitees.filter(function (p) { return p.state === "left"; }).length;
+    var stEl = groupOverlayEl.querySelector("#phone-state");
+    if (stEl) {
+      if (connected > 0) stEl.textContent = "通话中 · " + connected + " 人";
+      else if (left >= groupCall.invitees.length) stEl.textContent = "通话已结束";
+      else stEl.textContent = "呼叫中…";
+    }
+  }
+
+  function startGroupTimer() {
+    var timerEl = groupOverlayEl ? groupOverlayEl.querySelector("#phone-timer") : null;
+    groupTimerInt = setInterval(function () {
+      if (groupCall && groupCall.connectedAt && timerEl) {
+        timerEl.textContent = fmtDuration((Date.now() - groupCall.connectedAt) / 1000);
+      }
+    }, 1000);
+  }
+
+  function checkGroupCallAllLeft() {
+    if (!groupCall) return;
+    var all = groupCall.invitees.every(function (p) { return p.state === "left"; });
+    if (all) endGroupCall("通话结束");
+  }
+
+  /* 接通前挂断的留言：与一对一呼出挂断规则一致（49% 字卡 / 49% 语音 / 2% 无）
+     钩子点：后期可在此替换/扩展群聊专属留言规则 */
+  function queueGroupHangupMessage(c) {
+    if (!c || !groupCall) return;
+    var r = Math.random();
+    if (r < CONFIG.cardMessageChance) {
+      groupCall.msgs.push({ contact: c, kind: "card", cards: buildHangupCards(c) });
+    } else if (r < CONFIG.cardMessageChance + CONFIG.voiceMessageChance) {
+      groupCall.msgs.push({ contact: c, kind: "voice" });
+    }
+    // 其余 2%：不留留言
+  }
+
+  /* 结束群通话：记录日志 → 关闭界面 → 统一展示挂断成员的留言 */
+  function endGroupCall(notice) {
+    if (!groupCall) return;
+    var duration = groupCall.connectedAt
+      ? Math.round((Date.now() - groupCall.connectedAt) / 1000) : 0;
+    addLog({
+      type: "group", dir: "out",
+      kind: groupCall.connectedAt ? "answered" : "canceled",
+      groupId: groupCall.groupId,
+      contactIds: groupCall.invitees.map(function (p) { return p.id; }),
+      time: groupCall.startedAt,
+      duration: duration
+    });
+    var msgs = groupCall.msgs;
+    clearTimers();
+    var ov = groupOverlayEl;
+    groupCall = null;
+    groupOverlayEl = null;
+    if (ov) {
+      ov.classList.remove("is-open");
+      setTimeout(function () { ov.remove(); }, 350);
+    }
+    if (notice) showToast(notice);
+    if (msgs && msgs.length) {
+      setTimeout(function () { showGroupHangupMessages(msgs); }, 400);
+    }
+  }
+
+  /* 群通话挂断留言合并展示（字卡 / 语音） */
+  function showGroupHangupMessages(list) {
+    var html = list.map(function (m) {
+      var head = '<div style="margin:10px 0 4px;font-size:13px;opacity:.65;text-align:left;">' +
+        esc(m.contact ? m.contact.name : "未知") + '</div>';
+      if (m.kind === "card") {
+        if (!m.cards || !m.cards.length) return "";
+        return head + m.cards.map(cardToHtml).join("");
+      }
+      // 语音留言：按一对一语音留言规则取该成员语音字卡
+      var pool = audioCardsOf(m.contact);
+      if (!pool.length) {
+        return head + '<div style="padding:4px 0;font-size:13px;opacity:.7;">（该成员暂无语音字卡）</div>';
+      }
+      var r = Math.random();
+      var n = r < CONFIG.voiceMsg1Chance ? 1
+            : (r < CONFIG.voiceMsg1Chance + CONFIG.voiceMsg2Chance ? 2 : 3);
+      var seg = "";
+      for (var i = 0; i < n; i++) {
+        var src = pool[Math.floor(Math.random() * pool.length)];
+        seg += '<audio controls preload="none" src="' + src +
+          '" style="width:100%;margin:6px 0;border-radius:10px;"></audio>';
+      }
+      return head + seg;
+    }).join("");
+    if (!html) return;
+    showMessageSheet("群电话留言", { name: "群聊成员" }, html);
+  }
+
+  /* ============================================================
+     钩子：群成员 ↔ 群成员 通话（无我参与）
+     目前规则：仅仅是"通话"——记录一条群通话日志，无字卡回复、
+     无语音留言等任何附加功能。
+     后期扩展：在此函数内为通话双方接入字卡/语音等行为即可，
+     不影响含我通话的既有逻辑。
+     ============================================================ */
+  function memberToMemberCall(g, callerId, inviteeIds) {
+    addLog({
+      type: "group", dir: "member",
+      groupId: g.id, callerId: callerId, inviteeIds: inviteeIds,
+      time: Date.now(), duration: 0
     });
   }
 
@@ -541,7 +841,31 @@ window.MinePhone = (function () {
     return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hm;
   }
 
+  /* 群通话记录行 */
+  function groupLogRowHTML(entry) {
+    var g = findGroup(entry.groupId);
+    var gname = g ? g.name : "群聊";
+    var durText = entry.duration > 0 ? fmtDuration(entry.duration) : "";
+    var kindText;
+    if (entry.dir === "out") {
+      kindText = "群呼出 · " + ((entry.contactIds || []).length) + " 人 · " + fmtLogTime(entry.time);
+    } else {
+      var caller = findContact(entry.callerId);
+      kindText = (caller ? caller.name : "成员") + " 发起 · " +
+        ((entry.inviteeIds || []).length) + " 人 · " + fmtLogTime(entry.time);
+    }
+    return '<div class="phone-log-row">' +
+      '<div class="phone-log-icon">' + I.svg("users", 18) + '</div>' +
+      '<div class="phone-log-info">' +
+        '<span class="phone-log-name">' + esc(gname) + '</span>' +
+        '<span class="phone-log-kind">' + kindText + '</span>' +
+      '</div>' +
+      '<span class="phone-log-dur">' + durText + '</span>' +
+    '</div>';
+  }
+
   function logRowHTML(entry) {
+    if (entry.type === "group") return groupLogRowHTML(entry);
     var c = findContact(entry.contactId);
     var name = c ? c.name : "未知";
     var iconName = entry.dir === "out" ? "phoneOut"
@@ -596,10 +920,11 @@ window.MinePhone = (function () {
   /* ==================== 联系人主动来电调度（每小时一次，互相独立） ==================== */
   var schedulerInt = null;
   var callSchedule = {};     // contactId -> 下一次抽取时间戳
+  var groupSchedule = {};    // groupId -> 下一次"成员发起通话"抽取时间戳
 
   function schedulerTick() {
     if (!CONFIG.incomingEnabled) return;
-    if (active) return;                        // 通话 / 来电进行中不打扰
+    if (active || groupCall) return;           // 通话 / 来电进行中不打扰
     var now = Date.now();
     var st = (window.MineContacts && MineContacts.getState)
       ? MineContacts.getState() : null;
@@ -622,13 +947,75 @@ window.MinePhone = (function () {
         if (Math.random() < CONFIG.incomingChance) hit = c;
       }
     });
-    if (hit) receiveCall(hit.id);
+    if (hit) { receiveCall(hit.id); return; }
+
+    tickGroupCallScheduler(now);
+  }
+
+  /* 群成员主动发起通话调度：每群独立抽取（频率/概率见 CONFIG 群聊电话区） */
+  function tickGroupCallScheduler(now) {
+    var st = (window.MineContacts && MineContacts.getState)
+      ? MineContacts.getState() : null;
+    var groups = (st && st.groups) || [];
+    if (!CONFIG.groupCallEnabled || groups.length === 0) return;
+
+    var rollMs = Math.max(1, CONFIG.groupRollMinutes) * 60000;
+    var hit = null;
+    groups.forEach(function (g) {
+      if (hit) return;                         // 每轮最多触发一次群通话
+      var t = groupSchedule[g.id];
+      if (!t) {
+        groupSchedule[g.id] = now + Math.floor(Math.random() * rollMs);
+        return;
+      }
+      if (t <= now) {
+        groupSchedule[g.id] = now + rollMs;
+        if (Math.random() < CONFIG.groupCallChance) hit = g;
+      }
+    });
+    if (!hit) return;
+
+    var members = (hit.members || []).filter(function (id) { return findContact(id); });
+    if (members.length === 0) return;
+
+    // 发起人：随机一位成员；被邀请名单同样包含"我"（群人数包含我）
+    var callerId = members[Math.floor(Math.random() * members.length)];
+    var pool = members.filter(function (id) { return id !== callerId; });
+    pool.push("me");
+
+    // 邀请人数：1 人 10% / 2 人 35% / 3 人及以上 55%
+    var r = Math.random();
+    var n;
+    if (r < CONFIG.groupInvite1Chance) n = 1;
+    else if (r < CONFIG.groupInvite1Chance + CONFIG.groupInvite2Chance) n = 2;
+    else n = 3 + Math.floor(Math.random() * (CONFIG.groupMaxExtraInvitees + 1));
+    if (n > pool.length) n = pool.length;
+
+    // 随机挑选被邀请成员
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    var invitees = pool.slice(0, n);
+
+    if (invitees.indexOf("me") >= 0) {
+      // 名单含我 → 按一对一呼入规则响铃（接听/未接留言与列表联系人一致）
+      var others = invitees.filter(function (id) { return id !== "me"; });
+      if (others.length) memberToMemberCall(hit, callerId, others);
+      receiveCall(callerId);
+    } else {
+      // 纯成员间通话：仅记录（钩子，后期扩展）
+      memberToMemberCall(hit, callerId, invitees);
+    }
   }
 
   /* ==================== 初始化 ==================== */
   function init() {
     loadLog();
     callSchedule = {};                         // 重置调度表
+    groupSchedule = {};                        // 重置群通话调度表
+    groupCall = null;
+    groupOverlayEl = null;
     if (schedulerInt) clearInterval(schedulerInt);
     schedulerInt = setInterval(schedulerTick, 10000);   // 每 10 秒检查一次
   }
