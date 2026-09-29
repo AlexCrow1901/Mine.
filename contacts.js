@@ -65,8 +65,6 @@ window.MineContacts = (function () {
           }
           // 回复延迟（秒），默认 1.5 秒
           if (c.replyDelay === undefined) c.replyDelay = 1.5;
-         // 回复延迟（秒），默认 1.5 秒
-          if (c.replyDelay === undefined) c.replyDelay = 1.5;
           // 主动发消息设置（默认关闭；区间 1 分钟 ~ 12 小时）
           if (c.proactiveOn === undefined) c.proactiveOn = false;
           if (c.proactiveMin === undefined) c.proactiveMin = 60;
@@ -354,7 +352,7 @@ window.MineContacts = (function () {
     return m + " 分 " + s + " 秒";
   }
 
-     /** 主动发消息间隔标签（分钟 → "X 分钟" / "X 小时" / "X 小时 Y 分"） */
+  /** 主动发消息间隔标签（分钟 → "X 分钟" / "X 小时" / "X 小时 Y 分"） */
   function formatProactiveLabel(min) {
     min = parseInt(min, 10) || 0;
     if (min < 60) return min + " 分钟";
@@ -363,7 +361,7 @@ window.MineContacts = (function () {
     if (m === 0) return h + " 小时";
     return h + " 小时 " + m + " 分";
   }
-   
+
   /* ========================================================================
      视图 · 联系人主页（信息 + 字卡管理 + 聊天入口）
      ======================================================================== */
@@ -459,8 +457,7 @@ window.MineContacts = (function () {
           'min="0" max="600" step="1" value="' + (delaySec * 1) + '">' +
         '</div>' +
       '</div>' +
-      '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>' +
-           '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>';
+      '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>';
 
     // 主动消息设置（对方主动发消息的时间区间，1 分钟 ~ 12 小时）
     var proOn = c.proactiveOn === true;
@@ -503,7 +500,6 @@ window.MineContacts = (function () {
       '<div class="reply-hint">开启后，对方会在区间内随机时间主动发消息 · 发送后重新计时 · 群聊中每个成员独立计算 · 拖动调节 1 分钟 ~ 12 小时</div>' +
       '</div>';
     html += '</div>';
-       '</div>';
 
     html += '<div class="list-sep"></div>';
 
@@ -760,7 +756,7 @@ window.MineContacts = (function () {
       });
     }
 
-         // 主动消息（对方主动发消息）设置
+    // 主动消息（对方主动发消息）设置
     var proToggle = pageEl.querySelector("#proactive-toggle");
     if (proToggle) {
       var proSliders = pageEl.querySelector("#proactive-sliders");
@@ -837,7 +833,7 @@ window.MineContacts = (function () {
         });
       }
     }
-     
+
     // 添加字卡（空格分割批量添加 + 拼音排序）
     var addInput = pageEl.querySelector("#card-add-text");
     var toggleBtn = pageEl.querySelector('[data-act="toggle-cards"]');
