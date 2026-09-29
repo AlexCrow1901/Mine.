@@ -128,7 +128,6 @@ window.MineContacts = (function () {
     return typeof text === "string" && text.indexOf("data:audio/") === 0;
   }
 
-
   /** 判断字卡内容是否为 emoji（由 emoji 字符组成的短串） */
   function isEmojiCard(text) {
     if (typeof text !== "string" || text.length === 0) return false;
@@ -150,13 +149,12 @@ window.MineContacts = (function () {
   /** 混合排序：文本字卡按拼音 A→Z 排序，emoji 追加其后，图片字卡追加末尾 */
   function sortCardsMixed(cards) {
     if (!window.MineUtils) return cards;
-     var textCards = cards.filter(function (x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); });
+    var textCards = cards.filter(function (x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); });
     var emojiCards = cards.filter(function (x) { return isEmojiCard(x); });
     var imgCards = cards.filter(function (x) { return isImageCard(x); });
     var audioCards = cards.filter(function (x) { return isAudioCard(x); });
     if (textCards.length > 1) textCards = window.MineUtils.sortByPinyin(textCards);
     return textCards.concat(emojiCards, imgCards, audioCards);
-
   }
 
   function firstChar(name) {
@@ -304,7 +302,7 @@ window.MineContacts = (function () {
     return html;
   }
 
-    function contactRowHTML(c) {
+  function contactRowHTML(c) {
     var onlineCls = c.status ? "" : " is-online";
     var statusText = c.status || "在线";
     return '<div class="contact-row" role="button" tabindex="0" data-act="detail" data-id="' + c.id + '">' +
@@ -313,12 +311,9 @@ window.MineContacts = (function () {
         '<span class="contact-name">' + escapeHtml(c.name) + '</span>' +
         '<span class="contact-status' + onlineCls + '">' + escapeHtml(statusText) + '</span>' +
       '</div>' +
-      '<button class="contact-call-btn" data-call="' + c.id + '" title="呼叫 ' + escapeHtml(c.name) + '">' +
-        I.svg("phone", 17) + '</button>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
   }
-
 
   function groupRowHTML(g) {
     var count = (g.members || []).length;
@@ -384,14 +379,11 @@ window.MineContacts = (function () {
       '<span class="profile-status">' + escapeHtml(c.status || "在线") + '</span>' +
       '</div>';
 
-       // 聊天 / 语音通话按钮
-    html += '<div class="profile-actions-row">' +
-      '<button class="btn btn-primary" data-act="chat">' +
+    // 聊天按钮
+    html += '<div class="profile-actions">' +
+      '<button class="btn btn-primary btn-block" data-act="chat">' +
       I.svg("chat", 18) + ' 发消息</button>' +
-      '<button class="btn btn-primary" data-act="call">' +
-      I.svg("phone", 18) + ' 语音通话</button>' +
       '</div>';
-
 
     html += '<div class="list-sep"></div>';
 
@@ -483,12 +475,11 @@ window.MineContacts = (function () {
 
     // 字卡区
     var _cardCount  = (c.cards || []).length;
-       var _textCount  = (c.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
+    var _textCount  = (c.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
     var _emojiCount = (c.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
     var _imgCount   = (c.cards || []).filter(function(x) { return isImageCard(x); }).length;
     var _audioCount = (c.cards || []).filter(function(x) { return isAudioCard(x); }).length;
     html += '<div class="group-head">字卡 <span class="count">' + _cardCount + '</span>';
-
     html += '<button class="card-toggle-btn" data-act="toggle-cards">' + I.svg("plus", 18) + '</button>';
     if (_cardCount > 0) {
       html += '<button class="batch-toggle-btn" data-act="toggle-batch" style="display:none;">' + I.svg("trash", 14) + ' 批量删除</button>';
@@ -501,14 +492,13 @@ window.MineContacts = (function () {
       '<span>字符</span><span class="card-type-count">' + _textCount + '</span></button>' +
       '<button class="card-type-option" data-type="emoji">' + I.svg("smile", 20) +
       '<span>emoji</span><span class="card-type-count">' + _emojiCount + '</span></button>' +
-          '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
+      '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
       '<span>图片</span><span class="card-type-count">' + _imgCount + '</span></button>' +
       '<button class="card-type-option" data-type="audio">' + I.svg("mic", 20) +
       '<span>语音</span><span class="card-type-count">' + _audioCount + '</span></button>' +
       '</div>';
 
     // 字卡列表（默认折叠）
- 
     html += '<div class="cards-section" id="cards-section" style="display:none;">';
     html += renderCardsList(c, false, null);
     html += '</div>';
@@ -538,7 +528,7 @@ window.MineContacts = (function () {
       '<button class="btn card-image-add-btn" id="card-image-add-btn">' + I.svg("image", 18) + ' 选择图片</button>' +
       '</div>';
 
-      // 语音添加行（仅语音模式显示）
+    // 语音添加行（仅语音模式显示）
     html += '<div class="card-add-row" id="card-audio-add-row" style="display:none;">' +
       '<button class="btn card-image-add-btn" id="card-audio-add-btn">' + I.svg("mic", 18) + ' 选择语音文件</button>' +
       '</div>';
@@ -549,7 +539,6 @@ window.MineContacts = (function () {
 
     html += '<div class="card-hint">点击 + 展开字卡 · 选择字符 / emoji / 图片 / 语音 · 字符回车添加 · 图片语音可多选</div>';
 
-
     html += '<div class="list-sep"></div>';
     html += '<div style="padding:var(--sp-6) var(--sp-5);">' +
       '<button class="btn btn-block btn-danger" data-act="delete-contact">' +
@@ -558,6 +547,13 @@ window.MineContacts = (function () {
     html += '</div>';
     return html;
   }
+
+  function renderCardsList(c, batchMode, typeFilter) {
+    var cards = c.cards || [];
+    if (cards.length === 0) {
+      return '<div class="cards-empty">暂无字卡，添加后对方才能回复你</div>';
+    }
+    var html = "";
     cards.forEach(function (text, i) {
       var isImg = isImageCard(text);
       var isAud = isAudioCard(text);
@@ -575,14 +571,6 @@ window.MineContacts = (function () {
           : (isEmoji
             ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
             : '<span class="card-text">' + escapeHtml(text) + '</span>'));
-
-  function renderCardsList(c, batchMode, typeFilter) {
-    var cards = c.cards || [];
-    if (cards.length === 0) {
-      return '<div class="cards-empty">暂无字卡，添加后对方才能回复你</div>';
-    }
-    var html = "";
-
       if (batchMode) {
         html += '<div class="card-item card-selectable' + cardCls + '" data-card-idx="' + i + '">' +
           '<span class="card-check">' + I.svg("check", 14) + '</span>' + inner + '</div>';
@@ -595,9 +583,8 @@ window.MineContacts = (function () {
     if (!html) {
       if (typeFilter === "text") return '<div class="cards-empty">暂无字符字卡</div>';
       if (typeFilter === "emoji") return '<div class="cards-empty">暂无 emoji 字卡，输入 emoji 添加</div>';
-          if (typeFilter === "image") return '<div class="cards-empty">暂无图片字卡，点击「选择图片」添加</div>';
+      if (typeFilter === "image") return '<div class="cards-empty">暂无图片字卡，点击「选择图片」添加</div>';
       if (typeFilter === "audio") return '<div class="cards-empty">暂无语音字卡，点击「选择语音文件」添加</div>';
-
     }
     return html;
   }
@@ -645,15 +632,9 @@ window.MineContacts = (function () {
       resetTo("list");
     });
 
-       // 聊天
+    // 聊天
     pageEl.querySelector('[data-act="chat"]').addEventListener("click", function () {
       if (window.MineChat) MineChat.openContact(data.id);
-    });
-
-    // 语音通话
-    var callBtn = pageEl.querySelector('[data-act="call"]');
-    if (callBtn) callBtn.addEventListener("click", function () {
-      if (window.MinePhone) MinePhone.callContact(data.id);
     });
 
     // 搜索聊天记录
@@ -734,7 +715,6 @@ window.MineContacts = (function () {
       if (counts[1]) counts[1].textContent = _ec;
       if (counts[2]) counts[2].textContent = _ic;
       if (counts[3]) counts[3].textContent = _ac;
-
       if (batchMode) {
         bindBatchCards();
       } else {
@@ -785,7 +765,7 @@ window.MineContacts = (function () {
       // 显示字卡列表
       var cs = pageEl.querySelector("#cards-section");
       if (cs) cs.style.display = "";
-     // 显示对应的添加行
+      // 显示对应的添加行
       var tr = pageEl.querySelector("#card-text-add-row");
       var er = pageEl.querySelector("#card-emoji-add-row");
       var ir = pageEl.querySelector("#card-image-add-row");
@@ -805,7 +785,6 @@ window.MineContacts = (function () {
         }).length;
         batchBtn.style.display = filteredCount > 0 ? "" : "none";
       }
-
       // 切换按钮图标 → minus
       if (toggleBtn) toggleBtn.innerHTML = I.svg("minus", 18);
       refreshCards(false);
@@ -830,7 +809,6 @@ window.MineContacts = (function () {
       if (ir) ir.style.display = "none";
       if (ar) ar.style.display = "none";
       var tb = pageEl.querySelector("#batch-toolbar");
-
       if (tb) tb.style.display = "none";
       var batchBtn = pageEl.querySelector('[data-act="toggle-batch"]');
       if (batchBtn) batchBtn.style.display = "none";
@@ -888,7 +866,7 @@ window.MineContacts = (function () {
               if (tb && tb.style.display !== "none") exitBatchMode();
               else refreshCards(false);
               // 更新批量按钮可见性
-                  var batchBtn = pageEl.querySelector('[data-act="toggle-batch"]');
+              var batchBtn = pageEl.querySelector('[data-act="toggle-batch"]');
               if (batchBtn && cardViewMode === "image") {
                 var ic = c.cards.filter(function(x) { return isImageCard(x); }).length;
                 batchBtn.style.display = ic > 0 ? "" : "none";
@@ -944,7 +922,7 @@ window.MineContacts = (function () {
     if (addInput) addInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); doAddCard(); }
     });
-   
+
     /* -------- emoji 字卡添加（按字符分割，自动去重） -------- */
     var emojiInput = pageEl.querySelector("#card-add-emoji");
     function doAddEmojiCard() {
@@ -1813,14 +1791,12 @@ window.MineContacts = (function () {
       I.svg("camera", 16) + ' 更换群头像</button>' +
       '</div>';
 
-        // 群聊 / 群电话（预留）按钮
-    html += '<div class="profile-actions-row">' +
-      '<button class="btn btn-primary" data-act="group-chat-btn">' +
-      I.svg("chat", 18) + ' 发消息</button>' +
-      '<button class="btn btn-primary" data-act="group-call">' +
-      I.svg("users", 18) + ' 群电话</button>' +
-      '</div>';
+    // 群聊按钮
+    html += '<div class="profile-actions">' +
+      '<button class="btn btn-primary btn-block" data-act="group-chat-btn">' +
+      I.svg("chat", 18) + ' 发消息</button></div>';
 
+    html += '<div class="list-sep"></div>';
 
     // 搜索聊天记录入口
     html += '<div class="func-row" role="button" tabindex="0" data-act="search-history">' +
@@ -1865,11 +1841,10 @@ window.MineContacts = (function () {
 
     // 群字卡区
     var _gCardCount  = (g.cards || []).length;
-     var _gTextCount  = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
+    var _gTextCount  = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
     var _gEmojiCount = (g.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
     var _gImgCount   = (g.cards || []).filter(function(x) { return isImageCard(x); }).length;
     var _gAudioCount = (g.cards || []).filter(function(x) { return isAudioCard(x); }).length;
-
     html += '<div class="group-head">群字卡 <span class="count" id="group-card-count">' + _gCardCount + '</span>';
     html += '<button class="card-toggle-btn" data-act="toggle-gcards">' + I.svg("plus", 18) + '</button>';
     if (_gCardCount > 0) {
@@ -1883,12 +1858,11 @@ window.MineContacts = (function () {
       '<span>字符</span><span class="card-type-count">' + _gTextCount + '</span></button>' +
       '<button class="card-type-option" data-type="emoji">' + I.svg("smile", 20) +
       '<span>emoji</span><span class="card-type-count">' + _gEmojiCount + '</span></button>' +
-        '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
+      '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
       '<span>图片</span><span class="card-type-count">' + _gImgCount + '</span></button>' +
       '<button class="card-type-option" data-type="audio">' + I.svg("mic", 20) +
       '<span>语音</span><span class="card-type-count">' + _gAudioCount + '</span></button>' +
       '</div>';
-
 
     // 字卡列表（默认折叠）
     html += '<div class="cards-section" id="group-cards-section" style="display:none;">';
@@ -1920,7 +1894,7 @@ window.MineContacts = (function () {
       '<button class="btn card-image-add-btn" id="group-card-image-add-btn">' + I.svg("image", 18) + ' 选择图片</button>' +
       '</div>';
 
-     // 语音添加行（仅语音模式）
+    // 语音添加行（仅语音模式）
     html += '<div class="card-add-row" id="group-card-audio-add-row" style="display:none;">' +
       '<button class="btn card-image-add-btn" id="group-card-audio-add-btn">' + I.svg("mic", 18) + ' 选择语音文件</button>' +
       '</div>';
@@ -1930,7 +1904,6 @@ window.MineContacts = (function () {
     html += '<input type="file" accept="audio/*" id="group-card-audio-file" style="display:none" multiple>';
 
     html += '<div class="card-hint">点击 + 展开群字卡 · 选择字符 / emoji / 图片 / 语音 · 字符回车添加 · 图片语音可多选 · 群字卡可被所有成员在群聊中使用</div>';
-
 
     html += '<div class="list-sep"></div>';
     html += '<div class="group-head">群成员</div>';
@@ -1967,7 +1940,7 @@ window.MineContacts = (function () {
       return '<div class="cards-empty">暂无群字卡，添加后成员可在群聊中使用</div>';
     }
     var html = "";
-     cards.forEach(function (text, i) {
+    cards.forEach(function (text, i) {
       var isImg = isImageCard(text);
       var isAud = isAudioCard(text);
       var isEmoji = isEmojiCard(text);
@@ -1984,7 +1957,6 @@ window.MineContacts = (function () {
           : (isEmoji
             ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
             : '<span class="card-text">' + escapeHtml(text) + '</span>'));
-
       if (batchMode) {
         html += '<div class="card-item card-selectable' + cardCls + '" data-gcard-idx="' + i + '">' +
           '<span class="card-check">' + I.svg("check", 14) + '</span>' + inner + '</div>';
@@ -2001,7 +1973,6 @@ window.MineContacts = (function () {
       if (typeFilter === "audio") return '<div class="cards-empty">暂无语音群字卡，点击「选择语音文件」添加</div>';
     }
     return html;
-
   }
 
   function renderGroupAutoCardsList(g, batchMode) {
@@ -2043,7 +2014,7 @@ window.MineContacts = (function () {
       var countEl = pageEl.querySelector("#group-card-count");
       if (countEl) countEl.textContent = (g.cards || []).length;
       // 更新弹窗计数
-       var _tc = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
+      var _tc = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
       var _ec = (g.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
       var _ic = (g.cards || []).filter(function(x) { return isImageCard(x); }).length;
       var _ac = (g.cards || []).filter(function(x) { return isAudioCard(x); }).length;
@@ -2052,7 +2023,6 @@ window.MineContacts = (function () {
       if (counts[1]) counts[1].textContent = _ec;
       if (counts[2]) counts[2].textContent = _ic;
       if (counts[3]) counts[3].textContent = _ac;
-  
       if (batchMode) {
         bindGcardBatch();
       } else {
@@ -2102,7 +2072,7 @@ window.MineContacts = (function () {
       hideGCardTypePopup();
       var cs = pageEl.querySelector("#group-cards-section");
       if (cs) cs.style.display = "";
-         var tr = pageEl.querySelector("#group-card-text-add-row");
+      var tr = pageEl.querySelector("#group-card-text-add-row");
       var er = pageEl.querySelector("#group-card-emoji-add-row");
       var ir = pageEl.querySelector("#group-card-image-add-row");
       var ar = pageEl.querySelector("#group-card-audio-add-row");
@@ -2120,7 +2090,6 @@ window.MineContacts = (function () {
         }).length;
         batchBtn.style.display = fc > 0 ? "" : "none";
       }
-
       if (gToggleBtn) gToggleBtn.innerHTML = I.svg("minus", 18);
       refreshGroupCards(false);
       if (type === "text" && addInput) addInput.focus();
@@ -2143,7 +2112,6 @@ window.MineContacts = (function () {
       if (er) er.style.display = "none";
       if (ir) ir.style.display = "none";
       if (ar) ar.style.display = "none";
-
       var tb = pageEl.querySelector("#gcard-batch-toolbar");
       if (tb) tb.style.display = "none";
       var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
@@ -2195,7 +2163,7 @@ window.MineContacts = (function () {
               var tb = pageEl.querySelector("#gcard-batch-toolbar");
               if (tb && tb.style.display !== "none") exitGcardBatch();
               else refreshGroupCards(false);
-                     var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
+              var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
               if (batchBtn && gCardViewMode === "image") {
                 var ic = g.cards.filter(function(x) { return isImageCard(x); }).length;
                 batchBtn.style.display = ic > 0 ? "" : "none";
@@ -2249,7 +2217,6 @@ window.MineContacts = (function () {
     }
 
     if (addInput) addInput.addEventListener("keydown", function (e) {
-     
       if (e.key === "Enter") { e.preventDefault(); doAddCard(); }
     });
 
@@ -2614,18 +2581,12 @@ window.MineContacts = (function () {
       });
     }
 
-       // 群聊入口（导航栏 + 按钮）
+    // 群聊入口（导航栏 + 按钮）
     function startGroupChat() {
       if (window.MineChat) MineChat.openGroup(g.id);
     }
     pageEl.querySelector('[data-act="group-chat"]').addEventListener("click", startGroupChat);
     pageEl.querySelector('[data-act="group-chat-btn"]').addEventListener("click", startGroupChat);
-
-    // 群电话（预留入口，功能后期开放）
-    var groupCallBtn = pageEl.querySelector('[data-act="group-call"]');
-    if (groupCallBtn) groupCallBtn.addEventListener("click", function () {
-      if (window.MinePhone) MinePhone.openGroupCall(g.id);
-    });
 
     // 搜索聊天记录
     pageEl.querySelector('[data-act="search-history"]').addEventListener("click", function () {
