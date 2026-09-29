@@ -888,7 +888,7 @@ window.MineContacts = (function () {
               if (tb && tb.style.display !== "none") exitBatchMode();
               else refreshCards(false);
               // 更新批量按钮可见性
-              var batchBtn = pageEl.querySelector('[data-act="toggle-batch"]');
+                  var batchBtn = pageEl.querySelector('[data-act="toggle-batch"]');
               if (batchBtn && cardViewMode === "image") {
                 var ic = c.cards.filter(function(x) { return isImageCard(x); }).length;
                 batchBtn.style.display = ic > 0 ? "" : "none";
@@ -899,10 +899,52 @@ window.MineContacts = (function () {
         this.value = "";
       });
     }
+
+    /* -------- 语音字卡添加（audio 文件 → dataURL） -------- */
+    var cardAudioFile = pageEl.querySelector("#card-audio-file");
+    var audioAddBtn = pageEl.querySelector("#card-audio-add-btn");
+    if (audioAddBtn) {
+      audioAddBtn.addEventListener("click", function () {
+        if (cardAudioFile) cardAudioFile.click();
+      });
+    }
+    if (cardAudioFile) {
+      cardAudioFile.addEventListener("change", function () {
+        var files = this.files;
+        if (!files || files.length === 0) return;
+        if (!c.cards) c.cards = [];
+        var processed = 0;
+        var total = files.length;
+        Array.prototype.forEach.call(files, function (f) {
+          if (!f.type || f.type.indexOf("audio/") !== 0) { processed++; checkDone(); return; }
+          var reader = new FileReader();
+          reader.onload = function () {
+            var dataURL = reader.result;
+            if (dataURL && c.cards.indexOf(dataURL) < 0) c.cards.push(dataURL);
+            processed++;
+            checkDone();
+          };
+          reader.onerror = function () { processed++; checkDone(); };
+          reader.readAsDataURL(f);
+        });
+        function checkDone() {
+          if (processed !== total) return;
+          c.cards = sortCardsMixed(c.cards);
+          save();
+          var head = pageEl.querySelector(".group-head .count");
+          if (head) head.textContent = c.cards.length;
+          var tb = pageEl.querySelector("#batch-toolbar");
+          if (tb && tb.style.display !== "none") exitBatchMode();
+          else refreshCards(false);
+        }
+        this.value = "";
+      });
+    }
+
     if (addInput) addInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); doAddCard(); }
     });
-
+   
     /* -------- emoji 字卡添加（按字符分割，自动去重） -------- */
     var emojiInput = pageEl.querySelector("#card-add-emoji");
     function doAddEmojiCard() {
