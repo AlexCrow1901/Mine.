@@ -31,8 +31,15 @@ window.MinePhone = (function () {
     autoCardRatio: 0.70,            // 字卡留言中"自动回复字卡"占比（70%）；其余 30% 为普通文字字卡
     normalCard1Chance: 0.75,        // 普通文字字卡：发 1 条的概率
     normalCard2Chance: 0.20,        // 普通文字字卡：发 2 条的概率（剩 5% 为 3 条）
-    emojiAttachChance: 0.02,        // 每组字卡附赠 emoji 字卡的概率（2%）
+   emojiAttachChance: 0.02,        // 每组字卡附赠 emoji 字卡的概率（2%）
     emojiAttach2Chance: 0.20,       // 附赠时发 2 个 emoji 的概率（80% 为 1 个）
+    /* —— 通话中对方主动挂断 —— */
+    connectedHangupCheckSec: 1200,  // 通话中每隔多少秒检查一次对方主动挂断（20 分钟）
+    connectedHangupChance: 0.01,    // 每次检查对方主动挂断概率（1%）
+    /* —— 语音留言条数分布 —— */
+    voiceMsg1Chance: 0.70,           // 语音留言发 1 条的概率
+    voiceMsg2Chance: 0.20,           // 语音留言发 2 条的概率（剩 5% 为 3 条）
+ 
 
     connectedMinSec: 25,            // 接通后最短通话秒数
     connectedMaxSec: 150,           // 接通后最长通话秒数（超时自动挂断）
@@ -179,13 +186,28 @@ window.MinePhone = (function () {
       }
     }, 1000);
 
-    // 随机时长后自动结束（模拟对方挂断）
+      // 随机时长后自动结束（模拟对方挂断）
     var dur = CONFIG.connectedMinSec +
       Math.random() * (CONFIG.connectedMaxSec - CONFIG.connectedMinSec);
     timers.push(setTimeout(function () {
       if (active && active.state === "connected") endCall("通话结束");
     }, dur * 1000));
+
+    // 通话中：每隔 20 分钟掷骰，1% 概率对方主动挂断
+    // 呼出时挂断走"对方挂断"留言分支；呼入时挂断直接结束
+    timers.push(setInterval(function () {
+      if (!active || active.state !== "connected") return;
+      if (Math.random() >= CONFIG.connectedHangupChance) return;
+      var c = findContact(active.contactId);
+      if (active.dir === "out") {
+        endCall();
+        counterpartHangup(c);
+      } else {
+        endCall("对方挂断了通话");
+      }
+    }, CONFIG.connectedHangupCheckSec * 1000));
   }
+
 
   /* 结束通话（notice 可选，结束时弹 toast） */
   function endCall(notice) {
@@ -389,12 +411,49 @@ window.MinePhone = (function () {
     showMessageSheet("字卡留言", c, html);
   }
 
-
-  /* 语音留言：预留占位（后期植入） */
-  function showVoiceMessage(c) {
-    showMessageSheet("语音留言", c,
-      '收到一段来自雾中的语音留言。<br>语音功能开发中，敬请期待。');
+  /* 语音字卡池：联系人朋友圈字卡中 type=audio 的 content（audio dataURL） */
+  function audioCardsOf(c) {
+    var list = (c && c.momentCards) || [];
+    var out = [];
+    list.forEach(function (x) {
+      if (x && x.type === "audio" && typeof x.content === "string" &&
+          x.content.indexOf("data:audio/") === 0) out.push(x.content);
+    });
+    return out;
   }
+
+  /* 语音留言：70% 1 条 / 20% 2 条 / 5% 3 条；每组 2% 附 1~2 个 emoji 字卡 */
+  function showVoiceMessage(c) {
+    var pool = audioCardsOf(c);
+    if (!pool.length) {
+      showMessageSheet("语音留言", c,
+        '收到一段来自雾中的语音留言。<br>该联系人还没有语音字卡，敬请期待。');
+      return;
+    }
+    var r = Math.random();
+    var n = r < CONFIG.voiceMsg1Chance ? 1
+          : (r < CONFIG.voiceMsg1Chance + CONFIG.voiceMsg2Chance ? 2 : 3);
+    var html = "";
+    for (var i = 0; i < n; i++) {
+      var src = pool[Math.floor(Math.random() * pool.length)];
+      html += '<audio controls preload="none" src="' + src +
+        '" style="width:100%;margin:6px 0;border-radius:10px;"></audio>';
+    }
+    // 2% 附 1~2 个 emoji 字卡
+    if (Math.random() < CONFIG.emojiAttachChance) {
+      var emojiPool = ((c && c.autoCards) || []).concat((c && c.cards) || []).filter(isEmojiCard);
+      if (emojiPool.length) {
+        var m = Math.random() < (1 - CONFIG.emojiAttach2Chance) ? 1 : 2;
+        for (var j = 0; j < m; j++) {
+          html += '<div style="font-size:26px;text-align:center;margin:4px 0;">' +
+            esc(emojiPool[Math.floor(Math.random() * emojiPool.length)]) + '</div>';
+        }
+      }
+    }
+    showMessageSheet("语音留言", c, html);
+  }
+
+  
 
   /* ==================== 呼入电话 ==================== */
   function receiveCall(contactId) {
