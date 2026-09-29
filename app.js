@@ -280,11 +280,18 @@
       switchPage("detail");
       return true;
     }
-    if (id === "phone" && window.MinePhone) {
+     if (id === "phone" && window.MinePhone) {
       MinePhone.renderPage();
       switchPage("detail");
       return true;
     }
+    if (id === "files" && window.MineFiles) {
+      MineFiles.renderPage();
+      switchPage("detail");
+      return true;
+    }
+    return prevPage ? prevPage(id) : false;
+
     return prevPage ? prevPage(id) : false;
   };
 
