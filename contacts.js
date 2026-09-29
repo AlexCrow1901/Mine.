@@ -2138,9 +2138,12 @@ window.MineContacts = (function () {
       var tr = pageEl.querySelector("#group-card-text-add-row");
       var er = pageEl.querySelector("#group-card-emoji-add-row");
       var ir = pageEl.querySelector("#group-card-image-add-row");
+      var ar = pageEl.querySelector("#group-card-audio-add-row");
       if (tr) tr.style.display = "none";
       if (er) er.style.display = "none";
       if (ir) ir.style.display = "none";
+      if (ar) ar.style.display = "none";
+
       var tb = pageEl.querySelector("#gcard-batch-toolbar");
       if (tb) tb.style.display = "none";
       var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
@@ -2192,7 +2195,7 @@ window.MineContacts = (function () {
               var tb = pageEl.querySelector("#gcard-batch-toolbar");
               if (tb && tb.style.display !== "none") exitGcardBatch();
               else refreshGroupCards(false);
-              var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
+                     var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
               if (batchBtn && gCardViewMode === "image") {
                 var ic = g.cards.filter(function(x) { return isImageCard(x); }).length;
                 batchBtn.style.display = ic > 0 ? "" : "none";
@@ -2203,7 +2206,50 @@ window.MineContacts = (function () {
         this.value = "";
       });
     }
+
+    /* -------- 群语音字卡添加（audio 文件 → dataURL） -------- */
+    var gAudioAddBtn = pageEl.querySelector("#group-card-audio-add-btn");
+    var gCardAudioFile = pageEl.querySelector("#group-card-audio-file");
+    if (gAudioAddBtn) {
+      gAudioAddBtn.addEventListener("click", function () {
+        if (gCardAudioFile) gCardAudioFile.click();
+      });
+    }
+    if (gCardAudioFile) {
+      gCardAudioFile.addEventListener("change", function () {
+        var files = this.files;
+        if (!files || files.length === 0) return;
+        if (!g.cards) g.cards = [];
+        var processed = 0;
+        var total = files.length;
+        Array.prototype.forEach.call(files, function (f) {
+          if (!f.type || f.type.indexOf("audio/") !== 0) { processed++; checkDone(); return; }
+          var reader = new FileReader();
+          reader.onload = function () {
+            var dataURL = reader.result;
+            if (dataURL && g.cards.indexOf(dataURL) < 0) g.cards.push(dataURL);
+            processed++;
+            checkDone();
+          };
+          reader.onerror = function () { processed++; checkDone(); };
+          reader.readAsDataURL(f);
+        });
+        function checkDone() {
+          if (processed !== total) return;
+          g.cards = sortCardsMixed(g.cards);
+          save();
+          var countEl = pageEl.querySelector("#group-card-count");
+          if (countEl) countEl.textContent = g.cards.length;
+          var tb = pageEl.querySelector("#gcard-batch-toolbar");
+          if (tb && tb.style.display !== "none") exitGcardBatch();
+          else refreshGroupCards(false);
+        }
+        this.value = "";
+      });
+    }
+
     if (addInput) addInput.addEventListener("keydown", function (e) {
+     
       if (e.key === "Enter") { e.preventDefault(); doAddCard(); }
     });
 
