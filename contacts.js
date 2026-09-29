@@ -460,7 +460,50 @@ window.MineContacts = (function () {
         '</div>' +
       '</div>' +
       '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>' +
+           '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>';
+
+    // 主动消息设置（对方主动发消息的时间区间，1 分钟 ~ 12 小时）
+    var proOn = c.proactiveOn === true;
+    var proMin = (c.proactiveMin !== undefined) ? c.proactiveMin : 60;
+    var proMax = (c.proactiveMax !== undefined) ? c.proactiveMax : 720;
+    var proStateLabel = proOn
+      ? ("已开启 · " + formatProactiveLabel(proMin) + " ~ " + formatProactiveLabel(proMax))
+      : "已关闭";
+    html += '<div class="reply-setting-row proactive-head-row">' +
+      '<div class="reply-setting-info">' +
+        '<span class="func-title">主动消息</span>' +
+        '<span class="func-sub" id="proactive-state-label">' + proStateLabel + '</span>' +
+      '</div>' +
+      '<label class="proactive-switch">' +
+        '<input type="checkbox" id="proactive-toggle"' + (proOn ? ' checked' : '') + '>' +
+        '<span class="proactive-switch-track"></span>' +
+      '</label>' +
+      '</div>' +
+      '<div id="proactive-sliders"' + (proOn ? '' : ' style="display:none;"') + '>' +
+      '<div class="reply-setting-row">' +
+        '<div class="reply-setting-info">' +
+          '<span class="func-title">最短间隔</span>' +
+          '<span class="func-sub" id="proactive-min-label">' + formatProactiveLabel(proMin) + '</span>' +
+        '</div>' +
+        '<div class="slider-wrap">' +
+          '<input type="range" class="fog-slider" id="proactive-min-slider" ' +
+          'min="1" max="720" step="1" value="' + proMin + '">' +
+        '</div>' +
+      '</div>' +
+      '<div class="reply-setting-row">' +
+        '<div class="reply-setting-info">' +
+          '<span class="func-title">最长间隔</span>' +
+          '<span class="func-sub" id="proactive-max-label">' + formatProactiveLabel(proMax) + '</span>' +
+        '</div>' +
+        '<div class="slider-wrap">' +
+          '<input type="range" class="fog-slider" id="proactive-max-slider" ' +
+          'min="1" max="720" step="1" value="' + proMax + '">' +
+        '</div>' +
+      '</div>' +
+      '<div class="reply-hint">开启后，对方会在区间内随机时间主动发消息 · 发送后重新计时 · 群聊中每个成员独立计算 · 拖动调节 1 分钟 ~ 12 小时</div>' +
       '</div>';
+    html += '</div>';
+       '</div>';
 
     html += '<div class="list-sep"></div>';
 
@@ -717,6 +760,84 @@ window.MineContacts = (function () {
       });
     }
 
+         // 主动消息（对方主动发消息）设置
+    var proToggle = pageEl.querySelector("#proactive-toggle");
+    if (proToggle) {
+      var proSliders = pageEl.querySelector("#proactive-sliders");
+      var proState = pageEl.querySelector("#proactive-state-label");
+      var proMinS = pageEl.querySelector("#proactive-min-slider");
+      var proMaxS = pageEl.querySelector("#proactive-max-slider");
+      var proMinL = pageEl.querySelector("#proactive-min-label");
+      var proMaxL = pageEl.querySelector("#proactive-max-label");
+
+      // 设置变更后通知聊天模块刷新调度
+      var proNotifyChat = function () {
+        if (window.MineChat && MineChat.refreshProactive) MineChat.refreshProactive();
+      };
+      // 刷新"主动消息"行状态标签
+      var proRefreshState = function () {
+        if (!proState) return;
+        proState.textContent = c.proactiveOn === true
+          ? ("已开启 · " + formatProactiveLabel(c.proactiveMin) + " ~ " + formatProactiveLabel(c.proactiveMax))
+          : "已关闭";
+      };
+
+      proToggle.addEventListener("change", function () {
+        c.proactiveOn = this.checked;
+        if (c.proactiveOn) {
+          // 首次开启：默认 1 小时 ~ 12 小时
+          if (c.proactiveMin === undefined) c.proactiveMin = 60;
+          if (c.proactiveMax === undefined) c.proactiveMax = 720;
+          if (proMinS) proMinS.value = c.proactiveMin;
+          if (proMaxS) proMaxS.value = c.proactiveMax;
+          if (proMinL) proMinL.textContent = formatProactiveLabel(c.proactiveMin);
+          if (proMaxL) proMaxL.textContent = formatProactiveLabel(c.proactiveMax);
+        }
+        if (proSliders) proSliders.style.display = c.proactiveOn ? "" : "none";
+        proRefreshState();
+        save();
+        proNotifyChat();
+      });
+
+      // 最短间隔滑块（不超过最长间隔）
+      if (proMinS) {
+        proMinS.addEventListener("input", function () {
+          var v = parseInt(this.value, 10);
+          if (c.proactiveMax !== undefined && v > c.proactiveMax) {
+            c.proactiveMax = v;
+            if (proMaxS) proMaxS.value = v;
+            if (proMaxL) proMaxL.textContent = formatProactiveLabel(v);
+          }
+          c.proactiveMin = v;
+          if (proMinL) proMinL.textContent = formatProactiveLabel(v);
+          proRefreshState();
+        });
+        proMinS.addEventListener("change", function () {
+          save();
+          proNotifyChat();
+        });
+      }
+
+      // 最长间隔滑块（不低于最短间隔）
+      if (proMaxS) {
+        proMaxS.addEventListener("input", function () {
+          var v = parseInt(this.value, 10);
+          if (c.proactiveMin !== undefined && v < c.proactiveMin) {
+            c.proactiveMin = v;
+            if (proMinS) proMinS.value = v;
+            if (proMinL) proMinL.textContent = formatProactiveLabel(v);
+          }
+          c.proactiveMax = v;
+          if (proMaxL) proMaxL.textContent = formatProactiveLabel(v);
+          proRefreshState();
+        });
+        proMaxS.addEventListener("change", function () {
+          save();
+          proNotifyChat();
+        });
+      }
+    }
+     
     // 添加字卡（空格分割批量添加 + 拼音排序）
     var addInput = pageEl.querySelector("#card-add-text");
     var toggleBtn = pageEl.querySelector('[data-act="toggle-cards"]');
