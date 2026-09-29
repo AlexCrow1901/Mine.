@@ -296,7 +296,7 @@ window.MineContacts = (function () {
     return html;
   }
 
-  function contactRowHTML(c) {
+    function contactRowHTML(c) {
     var onlineCls = c.status ? "" : " is-online";
     var statusText = c.status || "在线";
     return '<div class="contact-row" role="button" tabindex="0" data-act="detail" data-id="' + c.id + '">' +
@@ -305,9 +305,12 @@ window.MineContacts = (function () {
         '<span class="contact-name">' + escapeHtml(c.name) + '</span>' +
         '<span class="contact-status' + onlineCls + '">' + escapeHtml(statusText) + '</span>' +
       '</div>' +
+      '<button class="contact-call-btn" data-call="' + c.id + '" title="呼叫 ' + escapeHtml(c.name) + '">' +
+        I.svg("phone", 17) + '</button>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
   }
+
 
   function groupRowHTML(g) {
     var count = (g.members || []).length;
@@ -373,11 +376,14 @@ window.MineContacts = (function () {
       '<span class="profile-status">' + escapeHtml(c.status || "在线") + '</span>' +
       '</div>';
 
-    // 聊天按钮
-    html += '<div class="profile-actions">' +
-      '<button class="btn btn-primary btn-block" data-act="chat">' +
+       // 聊天 / 语音通话按钮
+    html += '<div class="profile-actions-row">' +
+      '<button class="btn btn-primary" data-act="chat">' +
       I.svg("chat", 18) + ' 发消息</button>' +
+      '<button class="btn btn-primary" data-act="call">' +
+      I.svg("phone", 18) + ' 语音通话</button>' +
       '</div>';
+
 
     html += '<div class="list-sep"></div>';
 
@@ -612,9 +618,15 @@ window.MineContacts = (function () {
       resetTo("list");
     });
 
-    // 聊天
+       // 聊天
     pageEl.querySelector('[data-act="chat"]').addEventListener("click", function () {
       if (window.MineChat) MineChat.openContact(data.id);
+    });
+
+    // 语音通话
+    var callBtn = pageEl.querySelector('[data-act="call"]');
+    if (callBtn) callBtn.addEventListener("click", function () {
+      if (window.MinePhone) MinePhone.callContact(data.id);
     });
 
     // 搜索聊天记录
@@ -1722,12 +1734,14 @@ window.MineContacts = (function () {
       I.svg("camera", 16) + ' 更换群头像</button>' +
       '</div>';
 
-    // 群聊按钮
-    html += '<div class="profile-actions">' +
-      '<button class="btn btn-primary btn-block" data-act="group-chat-btn">' +
-      I.svg("chat", 18) + ' 发消息</button></div>';
+        // 群聊 / 群电话（预留）按钮
+    html += '<div class="profile-actions-row">' +
+      '<button class="btn btn-primary" data-act="group-chat-btn">' +
+      I.svg("chat", 18) + ' 发消息</button>' +
+      '<button class="btn btn-primary" data-act="group-call">' +
+      I.svg("users", 18) + ' 群电话</button>' +
+      '</div>';
 
-    html += '<div class="list-sep"></div>';
 
     // 搜索聊天记录入口
     html += '<div class="func-row" role="button" tabindex="0" data-act="search-history">' +
@@ -2449,12 +2463,18 @@ window.MineContacts = (function () {
       });
     }
 
-    // 群聊入口（导航栏 + 按钮）
+       // 群聊入口（导航栏 + 按钮）
     function startGroupChat() {
       if (window.MineChat) MineChat.openGroup(g.id);
     }
     pageEl.querySelector('[data-act="group-chat"]').addEventListener("click", startGroupChat);
     pageEl.querySelector('[data-act="group-chat-btn"]').addEventListener("click", startGroupChat);
+
+    // 群电话（预留入口，功能后期开放）
+    var groupCallBtn = pageEl.querySelector('[data-act="group-call"]');
+    if (groupCallBtn) groupCallBtn.addEventListener("click", function () {
+      if (window.MinePhone) MinePhone.openGroupCall(g.id);
+    });
 
     // 搜索聊天记录
     pageEl.querySelector('[data-act="search-history"]').addEventListener("click", function () {
