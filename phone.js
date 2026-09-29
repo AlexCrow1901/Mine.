@@ -23,8 +23,10 @@ window.MinePhone = (function () {
     /* —— 呼出通话 —— */
     answerMaxSec: 2,                // 正常接听前随机延迟上限（秒）
     hangupChance: 0.02,             // 我拨出时对方直接挂断的概率（2%）
-    cardMessageChance: 0.49,        // 挂断后附赠"字卡留言"概率（49%，内容取自动回复字卡）
-    voiceMessageChance: 0.49,       // 挂断后附赠"语音留言"概率（49%，预留，后期植入）
+   cardMessageChance: 0.49,        // 呼出被挂断后附赠"字卡留言"概率（49%，内容取自动回复字卡）
+    voiceMessageChance: 0.49,       // 呼出被挂断后附赠"语音留言"概率（49%，预留，后期植入）
+    missedCardChance: 0.49,         // 未接来电后附赠"字卡留言"概率（49%，从联系人主页全部字卡随机抽）
+    missedVoiceChance: 0.49,        // 未接来电后附赠"语音留言"概率（49%，预留，后期植入）
     connectedMinSec: 25,            // 接通后最短通话秒数
     connectedMaxSec: 150,           // 接通后最长通话秒数（超时自动挂断）
     /* —— 群聊电话模式（暂不设置，入口占位保留） —— */
@@ -337,13 +339,31 @@ window.MinePhone = (function () {
     active = { dir: "in", contactId: contactId, state: "ringing", startedAt: Date.now() };
     overlayEl.classList.add("is-ringing");
 
-    // 响铃超时 → 未接
+     // 响铃超时 → 未接（按概率附赠留言）
     timers.push(setTimeout(function () {
       if (active && active.dir === "in" && active.state === "ringing") {
-        endCall("未接来电 · " + c.name);
+        endCall();              // 记录本次未接来电
+        onMissedIncoming(c);
       }
     }, CONFIG.incomingRingSec * 1000));
   }
+
+  /* ---------- 未接来电：49% 字卡留言 / 49% 语音留言（预留）/ 2% 不回复 ---------- */
+  function onMissedIncoming(c) {
+    var r = Math.random();
+    if (r < CONFIG.missedCardChance) {
+      // 字卡留言：从联系人主页"自动回复字卡"中随机抽一张
+      var cards = (c && c.autoCards) || [];
+      var pick = cards.length ? cards[Math.floor(Math.random() * cards.length)] : null;
+      showCardMessage(c, pick);
+    } else if (r < CONFIG.missedCardChance + CONFIG.missedVoiceChance) {
+      // 语音留言：预留（后期植入）
+      showVoiceMessage(c);
+    } else {
+      showToast("未接来电 · " + (c ? c.name : ""));
+    }
+  }
+ 
 
   /* ==================== 群聊电话模式（暂不设置，入口占位保留） ==================== */
   function openGroupCall(groupId) {
