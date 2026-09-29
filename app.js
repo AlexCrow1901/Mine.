@@ -44,7 +44,7 @@
     files:    { title: "文件",   icon: "files",    desc: "文件管理尚未启用。" },
     settings: { title: "设置",   icon: "settings", desc: "设置项将在后续版本完善。" },
     weather:  { title: "天气",   icon: "weather",  desc: "雾都今日：浓雾，湿冷。\n能见度低，注意脚下石板路。" },
-    phone:    { title: "电话",   icon: "phone",    desc: "通话功能未接入。" },
+    phone:    { title: "电话",   icon: "phone",    desc: "通话功能正在加载中。" },
     browser:  { title: "浏览",   icon: "browser",  desc: "浏览器尚未启用。" },
     me:       { title: "我",     icon: "me",       desc: "个人中心建设中。" }
   };
@@ -216,8 +216,11 @@
     if (window.MineProfile) window.MineProfile.init();
     // 次元信箱初始化
     if (window.MineMail) window.MineMail.init();
-    // 深夜树洞初始化（启动定期检查器，处理待回复问卷）
+      // 深夜树洞初始化（启动定期检查器，处理待回复问卷）
     if (window.MineTreeHole) window.MineTreeHole.init();
+    // 电话模块初始化（启动联系人主动来电调度）
+    if (window.MinePhone) window.MinePhone.init();
+
 
     // ===== 注册 MineNotify provider =====
     if (window.MineNotify) {
@@ -269,7 +272,7 @@
   APP.openPlaceholder = openPlaceholder;
   APP.refreshGreeting = updateGreeting;
 
-  // 个人中心页面钩子（链式：保存前一个 page handler）
+   // 个人中心 / 电话页 页面钩子（链式：保存前一个 page handler）
   var prevPage = APP.page;
   APP.page = function (id) {
     if (id === "me" && window.MineProfile) {
@@ -277,8 +280,14 @@
       switchPage("detail");
       return true;
     }
+    if (id === "phone" && window.MinePhone) {
+      MinePhone.renderPage();
+      switchPage("detail");
+      return true;
+    }
     return prevPage ? prevPage(id) : false;
   };
+
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
