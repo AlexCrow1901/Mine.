@@ -150,11 +150,13 @@ window.MineContacts = (function () {
   /** 混合排序：文本字卡按拼音 A→Z 排序，emoji 追加其后，图片字卡追加末尾 */
   function sortCardsMixed(cards) {
     if (!window.MineUtils) return cards;
-    var textCards = cards.filter(function (x) { return !isImageCard(x) && !isEmojiCard(x); });
+     var textCards = cards.filter(function (x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); });
     var emojiCards = cards.filter(function (x) { return isEmojiCard(x); });
     var imgCards = cards.filter(function (x) { return isImageCard(x); });
+    var audioCards = cards.filter(function (x) { return isAudioCard(x); });
     if (textCards.length > 1) textCards = window.MineUtils.sortByPinyin(textCards);
-    return textCards.concat(emojiCards, imgCards);
+    return textCards.concat(emojiCards, imgCards, audioCards);
+
   }
 
   function firstChar(name) {
