@@ -1391,7 +1391,9 @@ window.MineChat = (function () {
 
       // 图片消息在预览中显示"[图片]"
       var _isImg = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:image/") === 0;
-      var _preview = _isImg ? "[图片]" : lastMsg.text;
+      var _isAud = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:audio/") === 0;
+      var _preview = _isImg ? "[图片]" : (_isAud ? "[语音]" : lastMsg.text);
+
       convs.push({
         key: key, title: title, avatarHTML: avatarHTML,
         type: type, id: id,
