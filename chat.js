@@ -65,11 +65,7 @@ window.MineChat = (function () {
     // 加载会话背景图
     loadBg();
     loadChatFontColor();
-       // 加载会话背景图
-    loadBg();
-    loadChatFontColor();
     chatLoaded = true;
-  }
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(conversations)); } catch (e) {}
@@ -1573,16 +1569,12 @@ window.MineChat = (function () {
   /* ========================================================================
      会话列表（聊天应用主页）
      ======================================================================== */
-   function openConvList() {
+  function openConvList() {
     load();
     // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
     if (C && C.loadData) C.loadData();
     // 刷新主动发消息调度（拾取新建群等目标变化）
     initProactive();
-function openConvList() {
-    load();
-    // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
-    if (C && C.loadData) C.loadData();
     if (!pageEl) pageEl = document.getElementById("page-chat");
     if (!pageEl) return;
 
@@ -2038,7 +2030,7 @@ function openConvList() {
     if (window.MineNotify) MineNotify.refreshBadges();
   }
 
-    /* ---------------- 注册 MineNotify provider ---------------- */
+  /* ---------------- 注册 MineNotify provider ---------------- */
   if (window.MineNotify) {
     MineNotify.register("chat", getNotifyCount, clearAllUnread);
   }
