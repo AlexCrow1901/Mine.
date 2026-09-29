@@ -65,6 +65,12 @@ window.MineContacts = (function () {
           }
           // 回复延迟（秒），默认 1.5 秒
           if (c.replyDelay === undefined) c.replyDelay = 1.5;
+         // 回复延迟（秒），默认 1.5 秒
+          if (c.replyDelay === undefined) c.replyDelay = 1.5;
+          // 主动发消息设置（默认关闭；区间 1 分钟 ~ 12 小时）
+          if (c.proactiveOn === undefined) c.proactiveOn = false;
+          if (c.proactiveMin === undefined) c.proactiveMin = 60;
+          if (c.proactiveMax === undefined) c.proactiveMax = 720;
           // 去重：清理历史遗留的重复字卡
           if (U && c.cards.length > 1) c.cards = U.deduplicateCards(c.cards);
           // 排序字卡（文本按拼音 A→Z，图片追加末尾）
@@ -348,6 +354,16 @@ window.MineContacts = (function () {
     return m + " 分 " + s + " 秒";
   }
 
+     /** 主动发消息间隔标签（分钟 → "X 分钟" / "X 小时" / "X 小时 Y 分"） */
+  function formatProactiveLabel(min) {
+    min = parseInt(min, 10) || 0;
+    if (min < 60) return min + " 分钟";
+    var h = Math.floor(min / 60);
+    var m = min % 60;
+    if (m === 0) return h + " 小时";
+    return h + " 小时 " + m + " 分";
+  }
+   
   /* ========================================================================
      视图 · 联系人主页（信息 + 字卡管理 + 聊天入口）
      ======================================================================== */
