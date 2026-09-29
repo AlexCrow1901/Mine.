@@ -785,21 +785,29 @@ window.MineChat = (function () {
     if (msg.isEmpty) bubbleClass += " is-empty";
     if (msg.isChoice) bubbleClass += " is-choice-msg";
 
-    // 图片消息检测
+       // 图片消息检测
     var isImageMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:image/") === 0;
     if (isImageMsg) bubbleClass += " is-image-msg";
 
+    // 语音消息检测
+    var isAudioMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:audio/") === 0;
+    if (isAudioMsg) bubbleClass += " is-image-msg";
+
     // emoji 消息检测
-    var isEmojiMsg = !msg.isChoice && typeof msg.text === "string" && isEmojiCard(msg.text);
+    var isEmojiMsg = !msg.isChoice && !isAudioMsg && typeof msg.text === "string" && isEmojiCard(msg.text);
+
     if (isEmojiMsg) bubbleClass += " is-emoji-msg";
 
     var rowClass = isMe ? "msg-row is-me" : "msg-row";
 
     // 抉择消息使用特殊渲染（ABCD 逐行对齐）；图片消息渲染为图片气泡；emoji 消息与文字同等大小
     var bubbleText;
-    if (isImageMsg) {
+        if (isImageMsg) {
       bubbleText = '<img class="msg-image" src="' + escapeHtml(msg.text) + '" alt="图片">';
+    } else if (isAudioMsg) {
+      bubbleText = '<audio controls preload="none" src="' + escapeHtml(msg.text) + '" style="width:200px;max-width:60vw;"></audio>';
     } else if (isEmojiMsg) {
+
       bubbleText = '<span class="msg-emoji">' + escapeHtml(msg.text) + '</span>';
     } else if (msg.isChoice) {
       bubbleText = renderChoiceText(msg);
