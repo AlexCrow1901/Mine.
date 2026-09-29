@@ -483,10 +483,12 @@ window.MineContacts = (function () {
 
     // 字卡区
     var _cardCount  = (c.cards || []).length;
-    var _textCount  = (c.cards || []).filter(function(x) { return !isImageCard(x) && !isEmojiCard(x); }).length;
+       var _textCount  = (c.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
     var _emojiCount = (c.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
     var _imgCount   = (c.cards || []).filter(function(x) { return isImageCard(x); }).length;
+    var _audioCount = (c.cards || []).filter(function(x) { return isAudioCard(x); }).length;
     html += '<div class="group-head">字卡 <span class="count">' + _cardCount + '</span>';
+
     html += '<button class="card-toggle-btn" data-act="toggle-cards">' + I.svg("plus", 18) + '</button>';
     if (_cardCount > 0) {
       html += '<button class="batch-toggle-btn" data-act="toggle-batch" style="display:none;">' + I.svg("trash", 14) + ' 批量删除</button>';
