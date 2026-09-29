@@ -1865,9 +1865,11 @@ window.MineContacts = (function () {
 
     // 群字卡区
     var _gCardCount  = (g.cards || []).length;
-    var _gTextCount  = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isEmojiCard(x); }).length;
+     var _gTextCount  = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
     var _gEmojiCount = (g.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
     var _gImgCount   = (g.cards || []).filter(function(x) { return isImageCard(x); }).length;
+    var _gAudioCount = (g.cards || []).filter(function(x) { return isAudioCard(x); }).length;
+
     html += '<div class="group-head">群字卡 <span class="count" id="group-card-count">' + _gCardCount + '</span>';
     html += '<button class="card-toggle-btn" data-act="toggle-gcards">' + I.svg("plus", 18) + '</button>';
     if (_gCardCount > 0) {
