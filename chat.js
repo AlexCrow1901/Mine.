@@ -651,6 +651,9 @@ window.MineChat = (function () {
           '<span class="chat-nav-sub">' + escapeHtml(ctx.subtitle) + '</span>' +
         '</div>' +
         '<span class="nav-right">' +
+          (ctx.type === "contact"
+            ? '<button class="nav-btn chat-call-btn" data-act="call" title="语音通话">' + I.svg("phone", 20) + '</button>'
+            : '<button class="nav-btn chat-call-btn" data-act="group-call" title="群电话（预留）">' + I.svg("phone", 20) + '</button>') +
           '<button class="nav-btn chat-more-btn" data-act="bg-settings">' + I.svg("more", 20) + '</button>' +
         '</span>' +
       '</div>';
@@ -669,10 +672,18 @@ window.MineChat = (function () {
                 '<span class="wm-action-icon">' + I.svg("feather", 18) + '</span>' +
                 '<span class="wm-action-name">抉择</span>' +
               '</div>' +
+              (ctx.type === "contact"
+                ? '<div class="wm-action" role="button" tabindex="0" data-wm="call">' +
+                  '<span class="wm-action-icon">' + I.svg("phone", 18) + '</span>' +
+                  '<span class="wm-action-name">电话</span></div>'
+                : '<div class="wm-action" role="button" tabindex="0" data-wm="group-call">' +
+                  '<span class="wm-action-icon">' + I.svg("users", 18) + '</span>' +
+                  '<span class="wm-action-name">群电话</span></div>') +
             '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
+
 
     // 消息区域
     var msgHtml = '<div class="chat-messages" id="chat-messages"></div>';
@@ -854,7 +865,7 @@ window.MineChat = (function () {
       });
     }
 
-    // 抉择功能
+      // 抉择功能
     var choiceBtn = pageEl.querySelector('[data-wm="choice"]');
     if (choiceBtn) {
       choiceBtn.addEventListener("click", openChoiceDialog);
@@ -862,6 +873,47 @@ window.MineChat = (function () {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openChoiceDialog(); }
       });
     }
+
+    // 电话：导航栏按钮（一对一呼出 / 群聊预留入口）
+    var callNav = pageEl.querySelector('[data-act="call"]');
+    if (callNav) {
+      callNav.addEventListener("click", function () {
+        if (ctx.type === "contact" && window.MinePhone) MinePhone.callContact(ctx.id);
+      });
+    }
+    var groupCallNav = pageEl.querySelector('[data-act="group-call"]');
+    if (groupCallNav) {
+      groupCallNav.addEventListener("click", function () {
+        if (window.MinePhone) MinePhone.openGroupCall(ctx.id);
+      });
+    }
+
+    // 电话：with me 栏目（一对一呼出 / 群聊预留入口）
+    var wmCall = pageEl.querySelector('[data-wm="call"]');
+    if (wmCall) {
+      wmCall.addEventListener("click", function () {
+        if (ctx.type === "contact" && window.MinePhone) MinePhone.callContact(ctx.id);
+      });
+      wmCall.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (ctx.type === "contact" && window.MinePhone) MinePhone.callContact(ctx.id);
+        }
+      });
+    }
+    var wmGroupCall = pageEl.querySelector('[data-wm="group-call"]');
+    if (wmGroupCall) {
+      wmGroupCall.addEventListener("click", function () {
+        if (window.MinePhone) MinePhone.openGroupCall(ctx.id);
+      });
+      wmGroupCall.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (window.MinePhone) MinePhone.openGroupCall(ctx.id);
+        }
+      });
+    }
+
 
     // 点击时间 → 切换日期/时间显示
     msgContainer.addEventListener("click", function (e) {
