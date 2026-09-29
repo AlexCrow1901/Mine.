@@ -123,6 +123,12 @@ window.MineContacts = (function () {
     return typeof text === "string" && text.indexOf("data:image/") === 0;
   }
 
+  /** 判断字卡内容是否为语音（audio dataURL） */
+  function isAudioCard(text) {
+    return typeof text === "string" && text.indexOf("data:audio/") === 0;
+  }
+
+
   /** 判断字卡内容是否为 emoji（由 emoji 字符组成的短串） */
   function isEmojiCard(text) {
     if (typeof text !== "string" || text.length === 0) return false;
