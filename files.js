@@ -1,14 +1,5 @@
 /* ========================================================================
    Mine · 文件管理（数据导出 / 清除 / 存储扩容）
-   ------------------------------------------------------------------------
-   功能：
-   · 查看存储用量与浏览器配额（IndexedDB 大容量引擎，配合 storage.js）
-   · 申请持久化存储（navigator.storage.persist，防止浏览器自动清理）
-   · 一键导出全部 Mine 数据为 JSON 备份文件
-   · 按模块导出 / 按模块清除（二次确认）
-   · 清空全部 Mine 数据（二次确认，危险区）
-   接入：
-   · app.js：APP.page 钩子 id === "files" → MineFiles.renderPage()
    ======================================================================== */
 
 window.MineFiles = (function () {
@@ -37,12 +28,10 @@ window.MineFiles = (function () {
       .replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-
   function sizeOf(str) {
     try { return new Blob([String(str || "")]).size; }
     catch (e) { return String(str || "").length * 2; }
   }
-
   function fmtBytes(n) {
     n = Math.max(0, Math.floor(n || 0));
     if (n < 1024) return n + " B";
@@ -50,8 +39,6 @@ window.MineFiles = (function () {
     if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
     return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
   }
-
-  /* 收集所有 mine.* 键（含注册表未覆盖的，兜底进"其他"组） */
   function collectAll() {
     var all = {};
     try {
@@ -63,7 +50,6 @@ window.MineFiles = (function () {
     } catch (e) {}
     return all;
   }
-
   function moduleData(mod) {
     var out = {};
     mod.keys.forEach(function (k) {
@@ -73,14 +59,12 @@ window.MineFiles = (function () {
     });
     return out;
   }
-
   function moduleSize(mod) {
     var data = moduleData(mod);
     var bytes = 0, count = 0;
     Object.keys(data).forEach(function (k) { bytes += sizeOf(k) + sizeOf(data[k]); count++; });
     return { bytes: bytes, count: count };
   }
-
   function otherKeys() {
     var all = collectAll();
     var known = {};
@@ -90,7 +74,7 @@ window.MineFiles = (function () {
     return extra;
   }
 
-  /* ---------------- Toast（复用 phone.css 的 .phone-toast） ---------------- */
+  /* ---------------- Toast ---------------- */
   var toastTimer = null;
   function showToast(msg) {
     var el = document.querySelector(".phone-toast");
@@ -119,22 +103,14 @@ window.MineFiles = (function () {
       URL.revokeObjectURL(url);
     }, 300);
   }
-
   function stamp() {
     var d = new Date();
     function p(n) { return (n < 10 ? "0" : "") + n; }
     return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
   }
-
   function buildBackup(modules) {
-    return {
-      app: "Mine",
-      format: 1,
-      exportedAt: new Date().toISOString(),
-      modules: modules
-    };
+    return { app: "Mine", format: 1, exportedAt: new Date().toISOString(), modules: modules };
   }
-
   function exportAll() {
     var mods = {};
     MODULES.forEach(function (m) {
@@ -147,7 +123,6 @@ window.MineFiles = (function () {
     downloadJSON("mine-backup-" + stamp() + ".json", buildBackup(mods));
     showToast("已导出全部数据备份");
   }
-
   function exportModule(mod) {
     var d = moduleData(mod);
     if (Object.keys(d).length === 0) { showToast("「" + mod.name + "」暂无数据"); return; }
@@ -156,7 +131,7 @@ window.MineFiles = (function () {
     showToast("已导出「" + mod.name + "」");
   }
 
-  /* ---------------- 清除（二次确认 sheet，复用 phone.css 样式） ---------------- */
+  /* ---------------- 清除（二次确认 sheet） ---------------- */
   function confirmSheet(title, descHtml, okText, onOk) {
     var ov = document.createElement("div");
     ov.className = "sheet-overlay";
@@ -191,13 +166,11 @@ window.MineFiles = (function () {
       if (okHit) { close(); onOk(); }
     });
   }
-
   function removeKeys(keys) {
     keys.forEach(function (k) {
       try { localStorage.removeItem(k); } catch (e) {}
     });
   }
-
   function clearModule(mod) {
     var d = moduleData(mod);
     var n = Object.keys(d).length;
@@ -213,7 +186,6 @@ window.MineFiles = (function () {
       }
     );
   }
-
   function clearAll() {
     var all = collectAll();
     var n = Object.keys(all).length;
@@ -240,7 +212,6 @@ window.MineFiles = (function () {
     var mineBytes = 0;
     Object.keys(all).forEach(function (k) { mineBytes += sizeOf(k) + sizeOf(all[k]); });
     usageEl.textContent = fmtBytes(mineBytes) + "（Mine 数据）";
-
     if (navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(function (est) {
         if (quotaEl) {
@@ -254,7 +225,6 @@ window.MineFiles = (function () {
     } else {
       if (quotaEl) quotaEl.textContent = "当前浏览器不支持容量查询 · IndexedDB 大容量引擎";
     }
-
     var pTitle = document.getElementById("fs-persist-title");
     var pSub = document.getElementById("fs-persist-sub");
     if (navigator.storage && navigator.storage.persisted) {
@@ -266,7 +236,6 @@ window.MineFiles = (function () {
       });
     }
   }
-
   function requestPersist() {
     if (!navigator.storage || !navigator.storage.persist) {
       showToast("当前浏览器不支持持久化存储");
@@ -282,7 +251,6 @@ window.MineFiles = (function () {
   function renderPage() {
     var detail = document.getElementById("page-detail");
     if (!detail) return;
-
     var rowsHtml = "";
     MODULES.forEach(function (mod) {
       var s = moduleSize(mod);
@@ -298,7 +266,6 @@ window.MineFiles = (function () {
           '<button class="fs-mini-btn is-danger" data-act="clear-mod" data-mod="' + mod.key + '" title="清除' + esc(mod.name) + '">' + I.svg("trash", 16) + '</button>' +
         '</div>';
     });
-
     var html =
       '<div class="nav-bar">' +
         '<button class="nav-btn" data-act="back">' + I.svg("back", 20) + '返回</button>' +
@@ -306,7 +273,6 @@ window.MineFiles = (function () {
         '<span class="nav-right"></span>' +
       '</div>' +
       '<div class="scroll">' +
-
         '<div class="group-head">存储容量</div>' +
         '<div class="func-row">' +
           '<div class="func-icon">' + I.svg("files", 20) + '</div>' +
@@ -323,7 +289,6 @@ window.MineFiles = (function () {
           '</div>' +
           '<span class="chevron">' + I.svg("back", 18) + '</span>' +
         '</div>' +
-
         '<div class="list-sep"></div>' +
         '<div class="group-head">数据导出 · 清除</div>' +
         '<div class="func-row" data-act="export-all" style="background:rgba(150,170,190,0.10);">' +
@@ -334,9 +299,7 @@ window.MineFiles = (function () {
           '</div>' +
           '<span class="chevron">' + I.svg("back", 18) + '</span>' +
         '</div>' +
-
         rowsHtml +
-
         '<div class="list-sep"></div>' +
         '<div class="group-head">危险操作</div>' +
         '<div class="func-row" data-act="clear-all" style="color:#c98a8a;">' +
@@ -347,15 +310,12 @@ window.MineFiles = (function () {
           '</div>' +
           '<span class="chevron">' + I.svg("back", 18) + '</span>' +
         '</div>' +
-
         '<div class="card-hint" style="margin:14px 16px 30px;">' +
           '数据保存在本机浏览器（IndexedDB 大容量引擎，配额可达数百 MB）。<br>' +
           '「清除」后需刷新页面才完全生效；「清空」将自动刷新。' +
         '</div>' +
       '</div>';
-
     detail.innerHTML = html;
-
     var style = document.getElementById("fs-mini-style");
     if (!style) {
       style = document.createElement("style");
@@ -367,27 +327,22 @@ window.MineFiles = (function () {
         ".fs-mini-btn:active{transform:scale(0.94);}";
       document.head.appendChild(style);
     }
-
     bindEvents(detail);
     refreshQuota();
   }
 
-  /* ---------------- 事件绑定 ---------------- */
   function findMod(key) {
     for (var i = 0; i < MODULES.length; i++) if (MODULES[i].key === key) return MODULES[i];
     return null;
   }
-
   function bindEvents(pageEl) {
     var backBtn = pageEl.querySelector('[data-act="back"]');
     if (backBtn) backBtn.addEventListener("click", function () {
       if (window.MineApp && MineApp.goHome) MineApp.goHome();
     });
-
     pageEl.addEventListener("click", function (e) {
       var t = e.target;
       if (!t || !t.closest) return;
-
       var exportModBtn = t.closest('[data-act="export-mod"]');
       if (exportModBtn) {
         e.stopPropagation();
@@ -395,7 +350,6 @@ window.MineFiles = (function () {
         if (mod) exportModule(mod);
         return;
       }
-
       var clearModBtn = t.closest('[data-act="clear-mod"]');
       if (clearModBtn) {
         e.stopPropagation();
@@ -403,21 +357,14 @@ window.MineFiles = (function () {
         if (m2) clearModule(m2);
         return;
       }
-
       var exportAllRow = t.closest('[data-act="export-all"]');
       if (exportAllRow) { exportAll(); return; }
-
       var persistRow = t.closest('[data-act="persist"]');
       if (persistRow) { requestPersist(); return; }
-
       var clearAllRow = t.closest('[data-act="clear-all"]');
       if (clearAllRow) { clearAll(); return; }
     });
   }
 
-  return {
-    renderPage: renderPage,
-    exportAll: exportAll,
-    clearAll: clearAll
-  };
+  return { renderPage: renderPage, exportAll: exportAll, clearAll: clearAll };
 })();
