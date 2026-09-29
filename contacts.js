@@ -1967,19 +1967,24 @@ window.MineContacts = (function () {
       return '<div class="cards-empty">暂无群字卡，添加后成员可在群聊中使用</div>';
     }
     var html = "";
-    cards.forEach(function (text, i) {
+     cards.forEach(function (text, i) {
       var isImg = isImageCard(text);
+      var isAud = isAudioCard(text);
       var isEmoji = isEmojiCard(text);
       // 类型过滤
-      if (typeFilter === "text" && (isImg || isEmoji)) return;
+      if (typeFilter === "text" && (isImg || isAud || isEmoji)) return;
       if (typeFilter === "emoji" && !isEmoji) return;
       if (typeFilter === "image" && !isImg) return;
+      if (typeFilter === "audio" && !isAud) return;
       var cardCls = isImg ? ' card-image-item' : (isEmoji ? ' card-emoji-item' : '');
       var inner = isImg
         ? '<img class="card-image-thumb" src="' + escapeHtml(text) + '" alt="图片字卡">'
-        : (isEmoji
-          ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
-          : '<span class="card-text">' + escapeHtml(text) + '</span>');
+        : (isAud
+          ? '<audio controls preload="none" src="' + escapeHtml(text) + '" style="width:100%;margin:4px 0;"></audio>'
+          : (isEmoji
+            ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
+            : '<span class="card-text">' + escapeHtml(text) + '</span>'));
+
       if (batchMode) {
         html += '<div class="card-item card-selectable' + cardCls + '" data-gcard-idx="' + i + '">' +
           '<span class="card-check">' + I.svg("check", 14) + '</span>' + inner + '</div>';
@@ -1993,8 +1998,10 @@ window.MineContacts = (function () {
       if (typeFilter === "text") return '<div class="cards-empty">暂无字符群字卡</div>';
       if (typeFilter === "emoji") return '<div class="cards-empty">暂无 emoji 群字卡，输入 emoji 添加</div>';
       if (typeFilter === "image") return '<div class="cards-empty">暂无图片群字卡，点击「选择图片」添加</div>';
+      if (typeFilter === "audio") return '<div class="cards-empty">暂无语音群字卡，点击「选择语音文件」添加</div>';
     }
     return html;
+
   }
 
   function renderGroupAutoCardsList(g, batchMode) {
@@ -2036,13 +2043,16 @@ window.MineContacts = (function () {
       var countEl = pageEl.querySelector("#group-card-count");
       if (countEl) countEl.textContent = (g.cards || []).length;
       // 更新弹窗计数
-      var _tc = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isEmojiCard(x); }).length;
+       var _tc = (g.cards || []).filter(function(x) { return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x); }).length;
       var _ec = (g.cards || []).filter(function(x) { return isEmojiCard(x); }).length;
       var _ic = (g.cards || []).filter(function(x) { return isImageCard(x); }).length;
+      var _ac = (g.cards || []).filter(function(x) { return isAudioCard(x); }).length;
       var counts = pageEl.querySelectorAll("#group-card-type-popup .card-type-count");
       if (counts[0]) counts[0].textContent = _tc;
       if (counts[1]) counts[1].textContent = _ec;
       if (counts[2]) counts[2].textContent = _ic;
+      if (counts[3]) counts[3].textContent = _ac;
+  
       if (batchMode) {
         bindGcardBatch();
       } else {
@@ -2092,21 +2102,25 @@ window.MineContacts = (function () {
       hideGCardTypePopup();
       var cs = pageEl.querySelector("#group-cards-section");
       if (cs) cs.style.display = "";
-      var tr = pageEl.querySelector("#group-card-text-add-row");
+         var tr = pageEl.querySelector("#group-card-text-add-row");
       var er = pageEl.querySelector("#group-card-emoji-add-row");
       var ir = pageEl.querySelector("#group-card-image-add-row");
+      var ar = pageEl.querySelector("#group-card-audio-add-row");
       if (tr) tr.style.display = (type === "text") ? "" : "none";
       if (er) er.style.display = (type === "emoji") ? "" : "none";
       if (ir) ir.style.display = (type === "image") ? "" : "none";
+      if (ar) ar.style.display = (type === "audio") ? "" : "none";
       var batchBtn = pageEl.querySelector('[data-act="toggle-gcard-batch"]');
       if (batchBtn) {
         var fc = (g.cards || []).filter(function(x) {
-          if (type === "text") return !isImageCard(x) && !isEmojiCard(x);
+          if (type === "text") return !isImageCard(x) && !isAudioCard(x) && !isEmojiCard(x);
           if (type === "emoji") return isEmojiCard(x);
+          if (type === "audio") return isAudioCard(x);
           return isImageCard(x);
         }).length;
         batchBtn.style.display = fc > 0 ? "" : "none";
       }
+
       if (gToggleBtn) gToggleBtn.innerHTML = I.svg("minus", 18);
       refreshGroupCards(false);
       if (type === "text" && addInput) addInput.focus();
