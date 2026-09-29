@@ -322,7 +322,7 @@ window.MineContacts = (function () {
   }
 
   function groupRowHTML(g) {
-    var count = (g.members || []).length;
+    var count = (g.members || []).length + 1;
     return '<div class="contact-row" role="button" tabindex="0" data-act="group-detail" data-id="' + g.id + '">' +
       groupAvatarHTML(g, 46) +
       '<div class="contact-info">' +
@@ -1928,7 +1928,7 @@ window.MineContacts = (function () {
         '<input type="file" accept="image/*" id="group-detail-avatar-file" class="file-hidden">' +
       '</div>' +
       '<span class="gd-name">' + escapeHtml(g.name) + '</span>' +
-      '<span class="gd-meta">' + (g.members || []).length + ' 位成员</span>' +
+      '<span class="gd-meta">' + (g.members || []).length + 1 + ' 位成员</span>' +
       '<button class="btn status-shuffle-btn" data-act="change-group-avatar" style="margin-top:4px;">' +
       I.svg("camera", 16) + ' 更换群头像</button>' +
       '</div>';
