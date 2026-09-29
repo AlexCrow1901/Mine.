@@ -127,6 +127,9 @@ window.MinePhone = (function () {
     toastTimer = setTimeout(function () { el.classList.remove("is-show"); }, 2200);
   }
 
+  /* 最小化按钮图标（通话界面 → 悬浮球） */
+  var MIN_BTN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+
   /* ==================== 通话界面 ==================== */
   function buildOverlay(contact, incoming) {
     var I = window.MineIcons;
@@ -154,6 +157,7 @@ window.MinePhone = (function () {
           '<div class="phone-timer" id="phone-timer">00:00</div>' +
         '</div>' +
         '<div class="phone-controls">' +
+          '<button class="phone-ctl" data-ctl="min" title="最小化">' + MIN_BTN + '</button>' +
           '<button class="phone-ctl" data-ctl="mute" title="静音">' + I.svg("mic", 22) + '</button>' +
           (incoming
             ? '<button class="phone-ctl is-accept" data-ctl="accept" title="接听">' + I.svg("phone", 22) + '</button>'
@@ -220,6 +224,7 @@ window.MinePhone = (function () {
     }, CONFIG.connectedHangupCheckSec * 1000));
   }
 
+
   /* 结束通话（notice 可选，结束时弹 toast） */
   function endCall(notice) {
     if (!active) return;
@@ -235,12 +240,17 @@ window.MinePhone = (function () {
     addLog(entry);
 
     clearTimers();
+    removeCallBall();
     var ov = overlayEl;
     active = null;
     overlayEl = null;
     if (ov) {
-      ov.classList.remove("is-open");
-      setTimeout(function () { ov.remove(); }, 350);
+      if (ov.style.display === "none") {
+        ov.remove();            // 悬浮球模式：界面已隐藏，直接移除
+      } else {
+        ov.classList.remove("is-open");
+        setTimeout(function () { ov.remove(); }, 350);
+      }
     }
     if (notice) showToast(notice);
   }
@@ -250,6 +260,8 @@ window.MinePhone = (function () {
     if (!active || !overlayEl) return;
     if (ctl === "mute") {
       toggleMute();
+    } else if (ctl === "min") {
+      minimizeCall();          // 最小化为悬浮球，可边聊边打
     } else if (ctl === "accept") {
       if (active.dir === "in" && active.state === "ringing") enterConnected();
     } else if (ctl === "hangup") {
@@ -362,6 +374,7 @@ window.MinePhone = (function () {
       showToast("对方挂断了电话");
     }
   }
+
 
   /* ---------- 留言弹层（字卡 / 语音，样式复用 sheet + phone-reserved） ---------- */
   function showMessageSheet(title, c, descHtml) {
@@ -501,7 +514,9 @@ window.MinePhone = (function () {
       showToast("未接来电 · " + (c ? c.name : ""));
     }
   }
-     /* ==================== 群聊电话 ====================
+ 
+
+  /* ==================== 群聊电话 ====================
      · 群内任意成员均可发起，邀请任意数量成员
      · 我发起：被邀请成员各自独立按"一对一通话"规则结算
        （2% 接通前挂断 → 49% 字卡留言 / 49% 语音留言 / 2% 无留言；否则接通）
@@ -688,6 +703,7 @@ window.MinePhone = (function () {
           '</div>' +
         '</div>' +
         '<div class="phone-controls">' +
+          '<button class="phone-ctl" data-ctl="min" title="最小化">' + MIN_BTN + '</button>' +
           '<button class="phone-ctl" data-ctl="mute" title="静音">' + I2.svg("mic", 22) + '</button>' +
           '<button class="phone-ctl is-danger" data-ctl="hangup" title="挂断">' + I2.svg("phoneOff", 22) + '</button>' +
         '</div>' +
@@ -702,6 +718,8 @@ window.MinePhone = (function () {
       if (ctl === "mute") {
         var muted = btn.classList.toggle("is-muted");
         if (window.MineIcons) btn.innerHTML = MineIcons.svg(muted ? "micOff" : "mic", 22);
+      } else if (ctl === "min") {
+        minimizeGroupCall();   // 最小化为悬浮球，可边聊边打
       } else if (ctl === "hangup") {
         endGroupCall();
       }
@@ -774,12 +792,17 @@ window.MinePhone = (function () {
     });
     var msgs = groupCall.msgs;
     clearTimers();
+    removeCallBall();
     var ov = groupOverlayEl;
     groupCall = null;
     groupOverlayEl = null;
     if (ov) {
-      ov.classList.remove("is-open");
-      setTimeout(function () { ov.remove(); }, 350);
+      if (ov.style.display === "none") {
+        ov.remove();            // 悬浮球模式：界面已隐藏，直接移除
+      } else {
+        ov.classList.remove("is-open");
+        setTimeout(function () { ov.remove(); }, 350);
+      }
     }
     if (notice) showToast(notice);
     if (msgs && msgs.length) {
@@ -829,6 +852,133 @@ window.MinePhone = (function () {
       groupId: g.id, callerId: callerId, inviteeIds: inviteeIds,
       time: Date.now(), duration: 0
     });
+  }
+
+  /* ==================== 通话悬浮球（最小化后可边聊边打） ====================
+     · 通话界面点最小化按钮 → 收起为悬浮球，可任意拖动
+     · 点按悬浮球 → 还原通话界面；红色按钮 → 直接挂断
+     · 悬浮球期间可正常浏览、发消息、进群聊 */
+  var ballEl = null;
+  var ballTimerInt = null;
+  var ballHandlers = null;
+
+  function removeCallBall() {
+    if (ballTimerInt) { clearInterval(ballTimerInt); ballTimerInt = null; }
+    if (ballEl) { ballEl.remove(); ballEl = null; }
+    ballHandlers = null;
+  }
+
+  function showCallBall(getLabel, onTap, onHangup) {
+    removeCallBall();
+    ballHandlers = { onTap: onTap, onHangup: onHangup };
+    var el = document.createElement("div");
+    el.style.cssText = "position:fixed;z-index:9999;right:16px;bottom:130px;width:58px;height:58px;" +
+      "border-radius:50%;background:rgba(18,26,36,.92);border:1px solid rgba(160,185,205,.45);" +
+      "box-shadow:0 6px 18px rgba(0,0,0,.4);display:flex;flex-direction:column;align-items:center;" +
+      "justify-content:center;gap:1px;touch-action:none;-webkit-user-select:none;user-select:none;cursor:pointer;";
+    el.innerHTML =
+      '<span style="width:8px;height:8px;border-radius:50%;background:#7fd39a;box-shadow:0 0 8px #7fd39a;"></span>' +
+      '<span class="cb-label" style="font-size:10px;color:#cfe0ee;letter-spacing:.5px;">00:00</span>' +
+      '<button class="cb-end" style="position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-radius:50%;' +
+        'background:#d9534f;border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;' +
+        'cursor:pointer;padding:0;">' +
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="2.4" ' +
+          'stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+      '</button>';
+    document.body.appendChild(el);
+    ballEl = el;
+
+    var labelEl = el.querySelector(".cb-label");
+    function tick() {
+      var t = getLabel();
+      if (labelEl && t) labelEl.textContent = t;
+    }
+    tick();
+    ballTimerInt = setInterval(tick, 1000);
+
+    // 红色按钮：挂断（不参与拖动）
+    el.querySelector(".cb-end").addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (ballHandlers && ballHandlers.onHangup) ballHandlers.onHangup();
+    });
+
+    // 拖动 + 点按还原（移动超过 8px 判定为拖动）
+    var dragging = false, moved = false, sx = 0, sy = 0, offX = 0, offY = 0;
+    el.addEventListener("pointerdown", function (e) {
+      if (e.target && e.target.closest && e.target.closest(".cb-end")) return;
+      dragging = true;
+      moved = false;
+      sx = e.clientX;
+      sy = e.clientY;
+      var r = el.getBoundingClientRect();
+      offX = e.clientX - r.left;
+      offY = e.clientY - r.top;
+      if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
+      e.preventDefault();
+    });
+    el.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 8) moved = true;
+      if (moved) {
+        var x = Math.min(Math.max(e.clientX - offX, 0), window.innerWidth - el.offsetWidth);
+        var y = Math.min(Math.max(e.clientY - offY, 0), window.innerHeight - el.offsetHeight);
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+        el.style.right = "auto";
+        el.style.bottom = "auto";
+      }
+    });
+    el.addEventListener("pointerup", function () {
+      if (dragging && !moved && ballHandlers && ballHandlers.onTap) ballHandlers.onTap();
+      dragging = false;
+    });
+    el.addEventListener("pointercancel", function () { dragging = false; });
+  }
+
+  /* 一对一：最小化 / 还原 */
+  function minimizeCall() {
+    if (!active || !overlayEl) return;
+    overlayEl.classList.remove("is-open");
+    overlayEl.style.display = "none";
+    showCallBall(
+      function () {
+        if (!active) return "";
+        return active.state === "connected"
+          ? fmtDuration((Date.now() - active.connectedAt) / 1000) : "呼叫中";
+      },
+      restoreCall,
+      function () { endCall(); }
+    );
+  }
+  function restoreCall() {
+    removeCallBall();
+    if (active && overlayEl) {
+      overlayEl.style.display = "";
+      requestAnimationFrame(function () { overlayEl.classList.add("is-open"); });
+    }
+  }
+
+  /* 群电话：最小化 / 还原 */
+  function minimizeGroupCall() {
+    if (!groupCall || !groupOverlayEl) return;
+    groupOverlayEl.classList.remove("is-open");
+    groupOverlayEl.style.display = "none";
+    showCallBall(
+      function () {
+        if (!groupCall || !groupCall.connectedAt) return "呼叫中";
+        return fmtDuration((Date.now() - groupCall.connectedAt) / 1000);
+      },
+      restoreGroupCall,
+      function () { endGroupCall(); }
+    );
+  }
+  function restoreGroupCall() {
+    removeCallBall();
+    if (groupCall && groupOverlayEl) {
+      groupOverlayEl.style.display = "";
+      requestAnimationFrame(function () { groupOverlayEl.classList.add("is-open"); });
+    }
   }
 
   /* ==================== 电话页（Dock「电话」入口 · 通话记录） ==================== */
@@ -1016,6 +1166,7 @@ window.MinePhone = (function () {
     groupSchedule = {};                        // 重置群通话调度表
     groupCall = null;
     groupOverlayEl = null;
+    removeCallBall();
     if (schedulerInt) clearInterval(schedulerInt);
     schedulerInt = setInterval(schedulerTick, 10000);   // 每 10 秒检查一次
   }
