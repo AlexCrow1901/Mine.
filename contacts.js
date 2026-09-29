@@ -501,11 +501,14 @@ window.MineContacts = (function () {
       '<span>字符</span><span class="card-type-count">' + _textCount + '</span></button>' +
       '<button class="card-type-option" data-type="emoji">' + I.svg("smile", 20) +
       '<span>emoji</span><span class="card-type-count">' + _emojiCount + '</span></button>' +
-      '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
+          '<button class="card-type-option" data-type="image">' + I.svg("image", 20) +
       '<span>图片</span><span class="card-type-count">' + _imgCount + '</span></button>' +
+      '<button class="card-type-option" data-type="audio">' + I.svg("mic", 20) +
+      '<span>语音</span><span class="card-type-count">' + _audioCount + '</span></button>' +
       '</div>';
 
     // 字卡列表（默认折叠）
+ 
     html += '<div class="cards-section" id="cards-section" style="display:none;">';
     html += renderCardsList(c, false, null);
     html += '</div>';
@@ -535,10 +538,17 @@ window.MineContacts = (function () {
       '<button class="btn card-image-add-btn" id="card-image-add-btn">' + I.svg("image", 18) + ' 选择图片</button>' +
       '</div>';
 
+      // 语音添加行（仅语音模式显示）
+    html += '<div class="card-add-row" id="card-audio-add-row" style="display:none;">' +
+      '<button class="btn card-image-add-btn" id="card-audio-add-btn">' + I.svg("mic", 18) + ' 选择语音文件</button>' +
+      '</div>';
+
     // 隐藏文件选择器
     html += '<input type="file" accept="image/*" id="card-image-file" style="display:none" multiple>';
+    html += '<input type="file" accept="audio/*" id="card-audio-file" style="display:none" multiple>';
 
-    html += '<div class="card-hint">点击 + 展开字卡 · 选择字符 / emoji / 图片 · 字符回车添加 · 图片可多选</div>';
+    html += '<div class="card-hint">点击 + 展开字卡 · 选择字符 / emoji / 图片 / 语音 · 字符回车添加 · 图片语音可多选</div>';
+
 
     html += '<div class="list-sep"></div>';
     html += '<div style="padding:var(--sp-6) var(--sp-5);">' +
