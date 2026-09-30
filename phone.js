@@ -489,6 +489,10 @@ window.MinePhone = (function () {
     overlayEl = buildOverlay(c, true);
     active = { dir: "in", contactId: contactId, state: "ringing", startedAt: Date.now() };
     overlayEl.classList.add("is-ringing");
+    // 后台保活：页面不在前台时弹系统通知
+    if (window.MineKeepalive && document.visibilityState !== "visible") {
+      MineKeepalive.notify(c.name, "邀请你进行语音通话");
+    }
 
      // 响铃超时 → 未接（按概率附赠留言）
     timers.push(setTimeout(function () {
@@ -1069,6 +1073,7 @@ window.MinePhone = (function () {
 
   /* ==================== 联系人主动来电调度（每小时一次，互相独立） ==================== */
   var schedulerInt = null;
+  var resumeBound = false;   // 回前台补查事件是否已绑定（避免 init 重复绑定）
   var callSchedule = {};     // contactId -> 下一次抽取时间戳
   var groupSchedule = {};    // groupId -> 下一次"成员发起通话"抽取时间戳
 
@@ -1169,6 +1174,15 @@ window.MinePhone = (function () {
     removeCallBall();
     if (schedulerInt) clearInterval(schedulerInt);
     schedulerInt = setInterval(schedulerTick, 10000);   // 每 10 秒检查一次
+    // 后台保活：回到前台 / 时间跳跃恢复时立即补查来电（不必等 10 秒）
+    if (!resumeBound) {
+      resumeBound = true;
+      function onResumeTick() {
+        if (document.visibilityState === "visible") { try { schedulerTick(); } catch (e) {} }
+      }
+      document.addEventListener("visibilitychange", onResumeTick);
+      document.addEventListener("mine:timeskip", onResumeTick);
+    }
   }
 
   /* ==================== 列表行内电话按钮（事件委托，捕获阶段拦截行点击） ==================== */
