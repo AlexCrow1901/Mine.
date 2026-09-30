@@ -1,304 +1,284 @@
 /* ========================================================================
-   Mine · 应用主逻辑
+   Mine · 后台保活模块
    ------------------------------------------------------------------------
-   · 应用注册表（图标 / 标签 / 行为）—— 后续扩展直接在此追加
-   · 主屏图标网格 + Dock 渲染
-   · 状态栏时钟 / 信号 / 电池
-   · 页面切换（Home ↔ 详情占位页）
-   · 预留扩展：APP.page() 钩子，供后续聊天 / API / MCP 接入
+   目标（针对 vivo 浏览器 / Edge 安卓版）：
+   · 网页进入后台后尽量保持定时器运行（静音音频保活）
+   · 后台收到消息 / 来电时弹出系统通知（Notification API）
+   · 回到前台立即补查并补发后台期间到期的消息（时间戳校正）
+   · 前台保持屏幕常亮（Wake Lock，可选）
+   · 聊天记录存于 localStorage，切后台 / 重进 / 刷新均不丢失
+   说明：受手机系统省电机制限制，任何网页都无法 100% 保证后台永不休眠；
+         本模块用「音频保活 + 回前台补偿 + 系统通知」三层手段把体验做到最好。
+   接入：index.html 引入；其他模块调用 MineKeepalive.notify(title, body)。
    ======================================================================== */
-
-(function () {
+window.MineKeepalive = (function () {
   "use strict";
 
-  /* ---------------- 应用注册表 ----------------
-     page: 跳转到同名占位页；action:'background' 打开背景管理。
-     后续新增功能：在此添加条目，并实现对应 page 钩子即可。 */
-  var APPS = [
-    { id: "chat",       icon: "chat",       label: "聊天" },
-    { id: "contacts",   icon: "contacts",   label: "通讯录" },
-    { id: "companion",  icon: "discover",   label: "陪伴" },
-    { id: "moments",    icon: "moments",    label: "朋友圈" },
-    { id: "files",      icon: "files",      label: "文件" },
-    { id: "background", icon: "background", label: "背景", accent: true, action: "background" },
-    { id: "settings",   icon: "settings",   label: "设置" },
-    { id: "weather",    icon: "weather",    label: "天气" }
-  ];
+  var STATE_KEY = "mine.keepalive.v1";
+  var PREF_KEY = "mine.settings.v1";
+  var keepAudio = null;        // 保活用静音 <audio>
+  var wakeLock = null;         // Wake Lock 句柄
+  var audioStarted = false;    // 音频保活是否已尝试启动
+  var lastHeartbeat = Date.now();
+  var listenersBound = false;
 
-  var DOCK = [
-    { id: "phone",   icon: "phone",   label: "电话" },
-    { id: "chat",    icon: "chat",    label: "聊天" },
-    { id: "browser", icon: "browser", label: "浏览" },
-    { id: "me",      icon: "me",      label: "我" }
-  ];
-
-  /* ---------------- 占位页文案（后续替换为真实功能） ----------------
-     contacts 已由 contacts.js 通过 MineApp.page 钩子接管，下方仅作兜底。
-     chat 已由 chat.js 通过 MineApp.page 钩子接管，下方仅作兜底。 */
-  var PLACEHOLDER = {
-    chat:     { title: "聊天",   icon: "chat",     desc: "聊天模块加载中…" },
-    contacts: { title: "通讯录", icon: "contacts", desc: "联系人系统加载中…" },
-    discover: { title: "陪伴",   icon: "discover", desc: "陪伴页正在酝酿之中。" },
-    companion: { title: "陪伴",  icon: "discover", desc: "陪伴页正在酝酿之中。" },
-    moments:  { title: "朋友圈", icon: "moments",  desc: "动态广场待开放。" },
-    files:    { title: "文件",   icon: "files",    desc: "文件管理尚未启用。" },
-    settings: { title: "设置",   icon: "settings", desc: "设置项将在后续版本完善。" },
-    weather:  { title: "天气",   icon: "weather",  desc: "雾都今日：浓雾，湿冷。\n能见度低，注意脚下石板路。" },
-    phone:    { title: "电话",   icon: "phone",    desc: "通话功能正在加载中。" },
-    browser:  { title: "浏览",   icon: "browser",  desc: "浏览器尚未启用。" },
-    me:       { title: "我",     icon: "me",       desc: "个人中心建设中。" }
-  };
-
-  /* ---------------- 公共扩展命名空间 ----------------
-     后续模块可挂载：APP.page = function(id){ ... }  返回 true 表示已处理 */
-  var APP = window.MineApp = window.MineApp || {};
-
-  /* ---------------- DOM 引用 ---------------- */
-  var dom = {};
-
-  /* ---------------- 渲染主屏图标 ---------------- */
-  function cellHTML(app) {
-    var accent = app.accent ? " accent" : "";
-    var badge = window.MineNotify ? MineNotify.badgeHTML(app.id) : "";
-    return '<div class="app-cell" role="button" tabindex="0" data-app="' + app.id + '">' +
-      '<div class="app-icon' + accent + '">' + window.MineIcons.svg(app.icon, 28) + '</div>' + badge +
-      '<span class="app-label">' + app.label + '</span>' +
-      '</div>';
+  /* ---------------- 用户偏好（与"设置"页联动） ----------------
+     notify:     消息通知（后台新消息/来电时是否弹系统通知）
+     background: 后台运行（是否启用静音音频保活 + 屏幕常亮） */
+  var prefs = { notify: true, background: true };
+  function loadPrefs() {
+    try {
+      var raw = localStorage.getItem(PREF_KEY);
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (p && typeof p.notify === "boolean") prefs.notify = p.notify;
+        if (p && typeof p.background === "boolean") prefs.background = p.background;
+      }
+    } catch (e) {}
   }
-  function dockCellHTML(app) {
-    var badge = window.MineNotify ? MineNotify.badgeHTML(app.id) : "";
-    return '<div class="app-cell" role="button" tabindex="0" data-app="' + app.id + '">' +
-      '<div class="app-icon">' + window.MineIcons.svg(app.icon, 25) + '</div>' + badge +
-      '</div>';
+  function savePrefs() {
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) {}
+  }
+  function getPrefs() { return { notify: prefs.notify, background: prefs.background }; }
+  function setPref(key, val) {
+    if (key === "notify" || key === "background") {
+      prefs[key] = !!val;
+      savePrefs();
+      applyPrefs();
+    }
   }
 
-  function renderHome() {
-    dom.grid.innerHTML = APPS.map(cellHTML).join("");
-    dom.dock.innerHTML = DOCK.map(dockCellHTML).join("");
+  /* ---------------- 静音 WAV dataURL 生成 ----------------
+     生成 seconds 秒、8kHz、单声道、8-bit PCM 静音 WAV。
+     浏览器对「正在播放音频」的页面会放宽后台挂起限制。 */
+  function writeString(view, offset, str) {
+    for (var i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+  function silentWavDataURL(seconds) {
+    var sampleRate = 8000;
+    var numSamples = Math.floor(sampleRate * seconds);
+    var buffer = new ArrayBuffer(44 + numSamples);
+    var view = new DataView(buffer);
+    writeString(view, 0, "RIFF");
+    view.setUint32(4, 36 + numSamples, true);
+    writeString(view, 8, "WAVE");
+    writeString(view, 12, "fmt ");
+    view.setUint32(16, 16, true);          // fmt chunk 大小
+    view.setUint16(20, 1, true);           // PCM
+    view.setUint16(22, 1, true);           // 单声道
+    view.setUint32(24, sampleRate, true);  // 采样率
+    view.setUint32(28, sampleRate, true);  // 字节率（8-bit 单声道）
+    view.setUint16(32, 1, true);           // 块对齐
+    view.setUint16(34, 8, true);           // 位深
+    writeString(view, 36, "data");
+    view.setUint32(40, numSamples, true);
+    // PCM 采样全 0（静音），无需写入
+    var bytes = new Uint8Array(buffer);
+    var binary = "";
+    var chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return "data:audio/wav;base64," + btoa(binary);
+  }
 
-    // 绑定点击
-    document.querySelectorAll(".app-cell").forEach(function (cell) {
-      cell.addEventListener("click", function () { onAppTap(cell.getAttribute("data-app")); });
-      cell.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAppTap(cell.getAttribute("data-app")); }
+  /* ---------------- 音频保活启动 ---------------- */
+  function startAudioKeepalive() {
+    if (!prefs.background) return;   // 设置页关闭了"后台运行"
+    if (audioStarted) return;
+    audioStarted = true;
+    try {
+      keepAudio = new Audio(silentWavDataURL(2));
+      keepAudio.loop = true;
+      keepAudio.preload = "auto";
+      keepAudio.volume = 0.0;
+      keepAudio.muted = true;
+      // 播放结束 / 被中断时自动重播（双保险）
+      keepAudio.addEventListener("pause", function () {
+        if (keepAudio) { try { keepAudio.play(); } catch (e) {} }
       });
+      var p = keepAudio.play();
+      if (p && p.catch) p.catch(function () {
+        // 自动播放被拒：重置标记，等待下次交互再试
+        audioStarted = false;
+        keepAudio = null;
+      });
+    } catch (e) {
+      audioStarted = false;
+      keepAudio = null;
+    }
+  }
+  /* 停止音频保活（设置页关闭"后台运行"时调用） */
+  function stopAudioKeepalive() {
+    var a = keepAudio;
+    keepAudio = null;          // 先置空，pause 事件监听里不会重播
+    audioStarted = false;
+    if (a) {
+      try { a.pause(); a.src = ""; } catch (e) {}
+    }
+  }
+
+  /* ---------------- 系统通知（Notification API） ---------------- */
+  function notificationsSupported() {
+    return typeof window.Notification !== "undefined";
+  }
+  function requestNotificationPermission() {
+    if (!notificationsSupported()) return;
+    try {
+      if (Notification.permission === "default") {
+        var r = Notification.requestPermission();
+        if (r && r.then) r.then(function () {}, function () {});
+      }
+    } catch (e) {}
+  }
+  /** 弹出系统通知；页面在前台时通常无需调用 */
+  function notify(title, body) {
+    if (!prefs.notify) return;            // 设置页关闭了"消息通知"
+    if (!notificationsSupported()) return;
+    if (Notification.permission !== "granted") return;
+    try {
+      var n = new Notification(title || "Mine", {
+        body: body || "你收到一条新消息",
+        tag: "mine-notify",
+        renotify: true,
+        silent: false
+      });
+      n.onclick = function () {
+        try { window.focus(); } catch (e) {}
+        try { n.close(); } catch (e) {}
+      };
+      setTimeout(function () { try { n.close(); } catch (e) {} }, 10000);
+    } catch (e) {}
+  }
+
+  /* ---------------- Wake Lock 屏幕常亮（前台辅助） ---------------- */
+  function wakeLockSupported() {
+    return navigator && typeof navigator.wakeLock === "object" &&
+           typeof navigator.wakeLock.request === "function";
+  }
+  function requestWakeLock() {
+    if (!prefs.background) return;   // 设置页关闭了"后台运行"
+    if (!wakeLockSupported()) return;
+    try {
+      navigator.wakeLock.request("screen").then(function (lock) {
+        wakeLock = lock;
+        try {
+          lock.addEventListener("release", function () { wakeLock = null; });
+        } catch (e) {}
+      }).catch(function () { wakeLock = null; });
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) {
+      try { wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+  }
+  /* 设置变更后立即生效 */
+  function applyPrefs() {
+    if (prefs.background) {
+      startAudioKeepalive();
+      requestWakeLock();
+    } else {
+      stopAudioKeepalive();
+      releaseWakeLock();
+    }
+  }
+
+  /* ---------------- 状态持久化 ---------------- */
+  function saveState() {
+    try {
+      localStorage.setItem(STATE_KEY, JSON.stringify({
+        notif: notificationsSupported() ? Notification.permission : "unsupported",
+        ts: Date.now()
+      }));
+    } catch (e) {}
+  }
+
+  /* ---------------- 生命周期事件 ---------------- */
+  function onBecameVisible() {
+    // 回到前台：确保保活音频 / Wake Lock 恢复
+    startAudioKeepalive();
+    requestWakeLock();
+    saveState();
+  }
+  function bindLifecycle() {
+    if (listenersBound) return;
+    listenersBound = true;
+
+    // 页面可见性变化
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") onBecameVisible();
+    });
+
+    // bfcache：从后台/历史恢复，页面原样保留、不重新加载
+    window.addEventListener("pageshow", function (e) {
+      if (e.persisted) onBecameVisible();
+    });
+    window.addEventListener("resume", onBecameVisible);
+
+    // 页面被冻结 / 进入后台（状态已在 localStorage，无需同步阻塞）
+    window.addEventListener("freeze", function () { saveState(); });
+    window.addEventListener("pagehide", function () { saveState(); });
+  }
+
+  /* ---------------- 首次用户交互后启动保活 ----------------
+     浏览器自动播放策略要求音频播放须由用户手势触发。 */
+  function bindFirstInteraction() {
+    var started = false;
+    function gesture() {
+      if (started) return;
+      started = true;
+      startAudioKeepalive();
+      requestNotificationPermission();
+      requestWakeLock();
+      saveState();
+    }
+    ["click", "touchstart", "touchend", "keydown"].forEach(function (ev) {
+      window.addEventListener(ev, gesture, { passive: true, capture: false });
     });
   }
 
-  /* ---------------- 应用点击 ---------------- */
-  function onAppTap(appId) {
-    var app = findApp(appId);
-    if (!app) return;
-    if (app.action === "background") {
-      window.MineBackground.openManager();
-      return;
-    }
-    // 标记已查看该应用的通知
-    if (window.MineNotify) MineNotify.markSeen(appId);
-    // 预留钩子：若已注册真实页面逻辑则调用
-    if (typeof APP.page === "function" && APP.page(appId) === true) return;
-    openPlaceholder(appId);
-  }
-
-  function findApp(id) {
-    var all = APPS.concat(DOCK);
-    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
-    return null;
-  }
-
-  /* ---------------- 详情占位页 ---------------- */
-  function openPlaceholder(appId) {
-    var info = PLACEHOLDER[appId] || { title: appId, icon: "eye", desc: "敬请期待。" };
-    var navBar =
-      '<div class="nav-bar">' +
-        '<button class="nav-btn" data-act="back">' + window.MineIcons.svg("back", 20) + '返回</button>' +
-        '<span class="nav-title">' + info.title + '</span>' +
-        '<span class="nav-right"></span>' +
-      '</div>';
-    var desc = info.desc.replace(/\n/g, "<br>");
-    var body =
-      '<div class="scroll"><div class="empty-state">' +
-        '<div class="empty-icon">' + window.MineIcons.svg(info.icon, 30) + '</div>' +
-        '<div class="empty-title">' + info.title + '</div>' +
-        '<div class="empty-desc">' + desc + '</div>' +
-      '</div></div>';
-
-    dom.detail.innerHTML = navBar + body;
-    dom.detail.querySelector('[data-act="back"]').addEventListener("click", goHome);
-    switchPage("detail");
-  }
-
-  function goHome() { switchPage("home"); }
-
-  /* ---------------- 页面切换 ---------------- */
-  function switchPage(name) {
-    document.querySelectorAll(".page").forEach(function (p) {
-      p.classList.toggle("is-active", p.getAttribute("data-page") === name);
-    });
-  }
-
-  /* ---------------- 状态栏时钟 ---------------- */
-  function updateClock() {
-    var now = new Date();
-    var h = now.getHours();
-    var m = now.getMinutes();
-    dom.time.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-  }
-
-  function updateGreeting() {
-    var now = new Date();
-    var week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][now.getDay()];
-    var hello;
-    var h = now.getHours();
-    if (h < 6) hello = "深夜安";
-    else if (h < 11) hello = "早安";
-    else if (h < 14) hello = "午安";
-    else if (h < 18) hello = "午后好";
-    else if (h < 22) hello = "晚安";
-    else hello = "夜深了";
-    if (dom.hello) {
-      // 读取"我"的昵称，回退到"雾客"
-      var myName = "雾客";
-      try {
-        var raw = localStorage.getItem("mine.me.v1");
-        if (raw) {
-          var me = JSON.parse(raw);
-          if (me && me.name) myName = me.name;
-        }
-      } catch (e) {}
-      dom.hello.textContent = hello + "，" + myName;
-    }
-    if (dom.date) dom.date.textContent =
-      (now.getMonth() + 1) + "月" + now.getDate() + "日 · " + week;
-  }
-
-  /* ---------------- 长按主屏呼出背景管理 ---------------- */
-  function bindLongPress() {
-    var timer = null;
-    var grid = dom.gridWrap;
-    function start(e) {
-      timer = setTimeout(function () {
-        window.MineBackground.openManager();
-        timer = null;
-      }, 650);
-    }
-    function cancel() { if (timer) { clearTimeout(timer); timer = null; } }
-    grid.addEventListener("touchstart", start, { passive: true });
-    grid.addEventListener("touchend", cancel);
-    grid.addEventListener("touchmove", cancel, { passive: true });
-    grid.addEventListener("mousedown", start);
-    grid.addEventListener("mouseup", cancel);
-    grid.addEventListener("mouseleave", cancel);
-    grid.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  /* ---------------- 心跳：检测真实时间流逝 ----------------
+     后台定时器被节流后，恢复时通过时间差发现"时间跳跃"，
+     广播 mine:timeskip 事件，让聊天 / 电话模块补查到期任务。 */
+  function startHeartbeat() {
+    lastHeartbeat = Date.now();
+    setInterval(function () {
+      var now = Date.now();
+      var gap = now - lastHeartbeat;
+      lastHeartbeat = now;
+      // 正常 2 秒一跳；超过 6 秒说明被后台节流过
+      if (gap > 6000) {
+        try {
+          document.dispatchEvent(new CustomEvent("mine:timeskip", { detail: { gap: gap } }));
+        } catch (e) {}
+      }
+    }, 2000);
   }
 
   /* ---------------- 初始化 ---------------- */
   function init() {
-    dom.grid = document.getElementById("app-grid");
-    dom.dock = document.getElementById("dock-inner");
-    dom.gridWrap = document.querySelector(".app-grid-wrap");
-    dom.detail = document.getElementById("page-detail");
-    dom.time = document.getElementById("status-time");
-    dom.hello = document.querySelector(".greeting .hello");
-    dom.date = document.querySelector(".greeting .date");
-
-    renderHome();
-    updateClock();
-    updateGreeting();
-    bindLongPress();
-
-    setInterval(updateClock, 20000);
-    setInterval(updateGreeting, 60000);
-
-    // 背景管理器初始化
-    if (window.MineBackground) window.MineBackground.init();
-    // 个人中心初始化
-    if (window.MineProfile) window.MineProfile.init();
-    // 次元信箱初始化
-    if (window.MineMail) window.MineMail.init();
-      // 深夜树洞初始化（启动定期检查器，处理待回复问卷）
-    if (window.MineTreeHole) window.MineTreeHole.init();
-    // 电话模块初始化（启动联系人主动来电调度）
-    if (window.MinePhone) window.MinePhone.init();
-
-
-    // ===== 注册 MineNotify provider =====
-    if (window.MineNotify) {
-      // chat provider 已在 chat.js 中注册
-
-      // moments provider：基于时间戳统计新互动数
-      if (window.MineMoments) {
-        MineNotify.register("moments", function () {
-          return MineMoments.getUnreadCount();
-        });
-      }
-
-      // companion 聚合 provider：次元信箱 + 深夜树洞的未读总数
-      // 不注册 onSeen 回调：用户打开陪伴页时不清除未读，
-      // 角标保留到用户点进具体子应用（time-mailbox / night-whispers）才清除
-      if (window.MineMail || window.MineTreeHole) {
-        MineNotify.register("companion",
-          function () {
-            var count = 0;
-            if (window.MineMail) count += MineMail.getUnreadCount();
-            if (window.MineTreeHole) count += MineTreeHole.getUnreadCount();
-            return count;
-          }
-        );
-      }
-
-      // 陪伴页子卡片单独 provider（卡片角标）
-      if (window.MineMail) {
-        MineNotify.register("time-mailbox",
-          function () { return MineMail.getUnreadCount(); },
-          function () { MineMail.clearUnread(); }
-        );
-      }
-      if (window.MineTreeHole) {
-        MineNotify.register("night-whispers",
-          function () { return MineTreeHole.getUnreadCount(); },
-          function () { MineTreeHole.clearUnread(); }
-        );
-      }
-
-      // 初始刷新角标
-      MineNotify.refreshBadges();
-    }
+    loadPrefs();
+    bindLifecycle();
+    bindFirstInteraction();
+    startHeartbeat();
+    // 若启动时已在前台且历史上已授权，直接尝试
+    if (document.visibilityState === "visible") onBecameVisible();
   }
 
-  /* ---------------- 公共方法 ---------------- */
-  APP.goHome = goHome;
-  APP.switchPage = switchPage;
-  APP.openPlaceholder = openPlaceholder;
-  APP.refreshGreeting = updateGreeting;
+  init();
 
-   // 个人中心 / 电话页 页面钩子（链式：保存前一个 page handler）
-  var prevPage = APP.page;
-  APP.page = function (id) {
-    if (id === "me" && window.MineProfile) {
-      MineProfile.renderPage();
-      switchPage("detail");
-      return true;
-    }
-     if (id === "phone" && window.MinePhone) {
-      MinePhone.renderPage();
-      switchPage("detail");
-      return true;
-    }
-    if (id === "files" && window.MineFiles) {
-      MineFiles.renderPage();
-      switchPage("detail");
-      return true;
-    }
-    return prevPage ? prevPage(id) : false;
-
-    return prevPage ? prevPage(id) : false;
+  return {
+    init: init,
+    notify: notify,
+    requestPermission: requestNotificationPermission,
+    startAudioKeepalive: startAudioKeepalive,
+    requestWakeLock: requestWakeLock,
+    getPrefs: getPrefs,
+    setPref: setPref,
+    applyPrefs: applyPrefs,
+    isBackground: function () { return document.visibilityState !== "visible"; },
+    notificationsSupported: notificationsSupported
   };
-
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
 })();
