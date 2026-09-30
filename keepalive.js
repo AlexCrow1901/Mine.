@@ -15,11 +15,38 @@ window.MineKeepalive = (function () {
   "use strict";
 
   var STATE_KEY = "mine.keepalive.v1";
+  var PREF_KEY = "mine.settings.v1";
   var keepAudio = null;        // 保活用静音 <audio>
   var wakeLock = null;         // Wake Lock 句柄
   var audioStarted = false;    // 音频保活是否已尝试启动
   var lastHeartbeat = Date.now();
   var listenersBound = false;
+
+  /* ---------------- 用户偏好（与"设置"页联动） ----------------
+     notify:     消息通知（后台新消息/来电时是否弹系统通知）
+     background: 后台运行（是否启用静音音频保活 + 屏幕常亮） */
+  var prefs = { notify: true, background: true };
+  function loadPrefs() {
+    try {
+      var raw = localStorage.getItem(PREF_KEY);
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (p && typeof p.notify === "boolean") prefs.notify = p.notify;
+        if (p && typeof p.background === "boolean") prefs.background = p.background;
+      }
+    } catch (e) {}
+  }
+  function savePrefs() {
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) {}
+  }
+  function getPrefs() { return { notify: prefs.notify, background: prefs.background }; }
+  function setPref(key, val) {
+    if (key === "notify" || key === "background") {
+      prefs[key] = !!val;
+      savePrefs();
+      applyPrefs();
+    }
+  }
 
   /* ---------------- 静音 WAV dataURL 生成 ----------------
      生成 seconds 秒、8kHz、单声道、8-bit PCM 静音 WAV。
@@ -57,6 +84,7 @@ window.MineKeepalive = (function () {
 
   /* ---------------- 音频保活启动 ---------------- */
   function startAudioKeepalive() {
+    if (!prefs.background) return;   // 设置页关闭了"后台运行"
     if (audioStarted) return;
     audioStarted = true;
     try {
@@ -80,6 +108,15 @@ window.MineKeepalive = (function () {
       keepAudio = null;
     }
   }
+  /* 停止音频保活（设置页关闭"后台运行"时调用） */
+  function stopAudioKeepalive() {
+    var a = keepAudio;
+    keepAudio = null;          // 先置空，pause 事件监听里不会重播
+    audioStarted = false;
+    if (a) {
+      try { a.pause(); a.src = ""; } catch (e) {}
+    }
+  }
 
   /* ---------------- 系统通知（Notification API） ---------------- */
   function notificationsSupported() {
@@ -96,6 +133,7 @@ window.MineKeepalive = (function () {
   }
   /** 弹出系统通知；页面在前台时通常无需调用 */
   function notify(title, body) {
+    if (!prefs.notify) return;            // 设置页关闭了"消息通知"
     if (!notificationsSupported()) return;
     if (Notification.permission !== "granted") return;
     try {
@@ -119,6 +157,7 @@ window.MineKeepalive = (function () {
            typeof navigator.wakeLock.request === "function";
   }
   function requestWakeLock() {
+    if (!prefs.background) return;   // 设置页关闭了"后台运行"
     if (!wakeLockSupported()) return;
     try {
       navigator.wakeLock.request("screen").then(function (lock) {
@@ -128,6 +167,22 @@ window.MineKeepalive = (function () {
         } catch (e) {}
       }).catch(function () { wakeLock = null; });
     } catch (e) { wakeLock = null; }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) {
+      try { wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+  }
+  /* 设置变更后立即生效 */
+  function applyPrefs() {
+    if (prefs.background) {
+      startAudioKeepalive();
+      requestWakeLock();
+    } else {
+      stopAudioKeepalive();
+      releaseWakeLock();
+    }
   }
 
   /* ---------------- 状态持久化 ---------------- */
@@ -204,6 +259,7 @@ window.MineKeepalive = (function () {
 
   /* ---------------- 初始化 ---------------- */
   function init() {
+    loadPrefs();
     bindLifecycle();
     bindFirstInteraction();
     startHeartbeat();
@@ -219,6 +275,9 @@ window.MineKeepalive = (function () {
     requestPermission: requestNotificationPermission,
     startAudioKeepalive: startAudioKeepalive,
     requestWakeLock: requestWakeLock,
+    getPrefs: getPrefs,
+    setPref: setPref,
+    applyPrefs: applyPrefs,
     isBackground: function () { return document.visibilityState !== "visible"; },
     notificationsSupported: notificationsSupported
   };
