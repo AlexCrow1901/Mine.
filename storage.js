@@ -1,13 +1,16 @@
 /* ========================================================================
    Mine · 大容量存储增强（storage.js）
    ------------------------------------------------------------------------
-   仓库原文件中此文件缺失，此处提供一份兼容实现：
    · 保持 localStorage 的同步 API（getItem / setItem / removeItem / clear）
-   · 底层额外写入 IndexedDB，突破浏览器 5MB 配额限制（图片字卡 / 聊天背景等）
-   · 原生 localStorage 作为"降级镜像"：写入尽力同步（超配额时静默），
-     删除 storage.js 后原有数据仍保留在原生 localStorage 中
+   · 底层额外写入 IndexedDB，突破浏览器 5MB 配额限制（图片字卡 / 语音字卡 / 聊天背景等）
+   · 原生 localStorage 作为"降级镜像"：写入尽力同步（超配额时静默）
    · 首次加载同步用原生数据种子化缓存 → 兼容历史数据（升级不丢数据）
-   · 异步从 IndexedDB 恢复后，以 IndexedDB 中更新版本的键覆盖缓存
+   · 异步从 IndexedDB 恢复后，以 IndexedDB 中较新的键覆盖缓存
+   · 本次会话写入过的键（dirty）恢复时优先保留，防止旧数据覆盖新数据
+   数据安全（重要约定）：
+   · 迭代升级只优化功能，绝不主动删除聊天记录 / 朋友圈 / 联系人等任何用户数据
+   · 写入采用"同步原生镜像 + 短防抖 IndexedDB 持久化 + 卸载/后台立即冲刷"三级保障，
+     刷新或关闭页面时尽可能把最新数据落盘，避免丢失
    注意：必须在其它脚本之前加载（见 index.html）。
    ======================================================================== */
 
@@ -20,6 +23,7 @@
   var DB_NAME = "mine-storage";
   var DB_VER = 1;
   var STORE = "kv";
+  var META_KEY = "mine.storage.meta.v1";
 
   function openDB(cb) {
     var req;
@@ -31,6 +35,7 @@
     };
     req.onsuccess = function () { cb(req.result); };
     req.onerror = function () { cb(null); };
+    req.onblocked = function () { /* 等待其它页签关闭连接，不阻塞业务 */ };
   }
 
   function dbGetAll(db, cb) {
@@ -49,11 +54,13 @@
       entries.forEach(function (e) { store.put(e.value, e.key); });
       tx.oncomplete = function () { if (cb) cb(); };
       tx.onerror = function () { if (cb) cb(); };
+      tx.onabort = function () { if (cb) cb(); };
     } catch (e) { if (cb) cb(); }
   }
 
   /* ---- 同步缓存：先用原生 localStorage 种子化（升级兼容） ---- */
   var cache = {};
+  var dirty = {};   // 本次会话写入过的键：恢复时优先保留内存中的新值
   try {
     for (var i = 0; i < localStorage.length; i++) {
       var k = localStorage.key(i);
@@ -61,23 +68,44 @@
     }
   } catch (e) {}
 
-  /* ---- 异步持久化到 IndexedDB（防抖） ---- */
-  var persistPending = false;
-  function schedulePersist() {
-    if (persistPending) return;
-    persistPending = true;
-    setTimeout(function () {
-      persistPending = false;
-      openDB(function (db) {
-        if (!db) return;
-        var entries = [];
-        for (var key in cache) entries.push({ key: key, value: cache[key] });
-        dbPutAll(db, entries);
-      });
-    }, 300);
+  /* ---- IndexedDB 持久化（防抖 + 立即冲刷） ---- */
+  var persistTimer = null;
+  var flushing = false;
+
+  /* 立即把当前缓存全量写入 IndexedDB（幂等：写入所有键） */
+  function flushNow() {
+    if (flushing) return;
+    flushing = true;
+    openDB(function (db) {
+      flushing = false;
+      if (!db) return;
+      var entries = [];
+      for (var key in cache) entries.push({ key: key, value: cache[key] });
+      dbPutAll(db, entries);
+    });
   }
 
-  /* ---- 原生 localStorage 镜像（尽力而为，配额不足静默） ---- */
+  /* 短防抖：合并密集写入，降低 IndexedDB 事务开销 */
+  function schedulePersist() {
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(function () {
+      persistTimer = null;
+      flushNow();
+    }, 150);
+  }
+
+  /* 页面卸载 / 进入后台时立即冲刷（不等防抖），最大限度防丢数据 */
+  function flushOnExit() {
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+    flushNow();
+  }
+  window.addEventListener("pagehide", flushOnExit);
+  window.addEventListener("beforeunload", flushOnExit);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flushOnExit();
+  });
+
+  /* ---- 原生 localStorage 镜像（尽力而为，配额不足静默交给 IndexedDB） ---- */
   function mirrorNative(key, value) {
     try {
       if (value === null) localStorage.removeItem(key);
@@ -95,35 +123,48 @@
       key = String(key);
       value = String(value);
       cache[key] = value;
+      dirty[key] = true;
       mirrorNative(key, value);
       schedulePersist();
     },
     removeItem: function (key) {
       key = String(key);
       delete cache[key];
+      dirty[key] = true;
       mirrorNative(key, null);
       schedulePersist();
     },
     clear: function () {
+      // 仅供用户手动"清除数据"使用；迭代升级不会调用
       cache = {};
+      dirty = {};
       try { localStorage.clear(); } catch (e) {}
-      schedulePersist();
+      flushNow();
     }
   };
 
-  /* ---- 从 IndexedDB 恢复（较新的键覆盖缓存），完成后触发事件 ---- */
+  /* ---- 从 IndexedDB 恢复 ----
+     恢复时跳过本次会话已写入的键（dirty），避免旧数据覆盖刚写入的新数据；
+     其余键以 IndexedDB 中较新的值为准，并回写原生镜像。 */
   openDB(function (db) {
     if (!db) return;
     dbGetAll(db, function (entries) {
       entries.forEach(function (e) {
         if (e && e.key != null) {
-          if (cache[e.key] !== e.value) cache[e.key] = e.value;
-          try { localStorage.setItem(e.key, e.value); } catch (err) {}
+          if (!dirty[e.key] && cache[e.key] !== e.value) {
+            cache[e.key] = e.value;
+            try { localStorage.setItem(e.key, e.value); } catch (err) {}
+          }
         }
       });
+      // 合并后的全量写回 IndexedDB（含本次会话新写入的键）
       var all = [];
       for (var key in cache) all.push({ key: key, value: cache[key] });
       dbPutAll(db, all);
+      // 版本标记：仅记录存储层版本，不删除任何数据
+      try {
+        localStorage.setItem(META_KEY, JSON.stringify({ v: 2, ts: Date.now() }));
+      } catch (e) {}
       try { window.dispatchEvent(new Event("mine:storage-hydrated")); } catch (e) {}
     });
   });
