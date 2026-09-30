@@ -66,7 +66,7 @@ window.MineContacts = (function () {
           // 回复延迟（秒），默认 1.5 秒
           if (c.replyDelay === undefined) c.replyDelay = 1.5;
           // 主动发消息设置（默认关闭；区间 1 分钟 ~ 12 小时）
-          if (c.proactiveOn === undefined) c.proactiveOn = false;
+          if (c.proactiveOn === undefined) c.proactiveOn = true;
           if (c.proactiveMin === undefined) c.proactiveMin = 60;
           if (c.proactiveMax === undefined) c.proactiveMax = 720;
           // 去重：清理历史遗留的重复字卡
@@ -459,24 +459,17 @@ window.MineContacts = (function () {
       '</div>' +
       '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>';
 
-    // 主动消息设置（对方主动发消息的时间区间，1 分钟 ~ 12 小时）
-    var proOn = c.proactiveOn === true;
+    // 主动消息设置（对方主动发消息的时间区间，1 分钟 ~ 12 小时，始终开启）
     var proMin = (c.proactiveMin !== undefined) ? c.proactiveMin : 60;
     var proMax = (c.proactiveMax !== undefined) ? c.proactiveMax : 720;
-    var proStateLabel = proOn
-      ? ("已开启 · " + formatProactiveLabel(proMin) + " ~ " + formatProactiveLabel(proMax))
-      : "已关闭";
+    var proStateLabel = "已开启 · " + formatProactiveLabel(proMin) + " ~ " + formatProactiveLabel(proMax);
     html += '<div class="reply-setting-row proactive-head-row">' +
       '<div class="reply-setting-info">' +
         '<span class="func-title">主动消息</span>' +
         '<span class="func-sub" id="proactive-state-label">' + proStateLabel + '</span>' +
       '</div>' +
-      '<label class="proactive-switch">' +
-        '<input type="checkbox" id="proactive-toggle"' + (proOn ? ' checked' : '') + '>' +
-        '<span class="proactive-switch-track"></span>' +
-      '</label>' +
       '</div>' +
-      '<div id="proactive-sliders"' + (proOn ? '' : ' style="display:none;"') + '>' +
+      '<div id="proactive-sliders">' +
       '<div class="reply-setting-row">' +
         '<div class="reply-setting-info">' +
           '<span class="func-title">最短间隔</span>' +
@@ -497,7 +490,7 @@ window.MineContacts = (function () {
           'min="1" max="720" step="1" value="' + proMax + '">' +
         '</div>' +
       '</div>' +
-      '<div class="reply-hint">开启后，对方会在区间内随机时间主动发消息 · 发送后重新计时 · 群聊中每个成员独立计算 · 拖动调节 1 分钟 ~ 12 小时</div>' +
+      '<div class="reply-hint">对方会在区间内随机时间主动发消息 · 发送后重新计时 · 群聊中每个成员独立计算 · 拖动调节 1 分钟 ~ 12 小时</div>' +
       '</div>';
     html += '</div>';
 
@@ -756,10 +749,8 @@ window.MineContacts = (function () {
       });
     }
 
-    // 主动消息（对方主动发消息）设置
-    var proToggle = pageEl.querySelector("#proactive-toggle");
-    if (proToggle) {
-      var proSliders = pageEl.querySelector("#proactive-sliders");
+    // 主动消息间隔设置（始终开启，仅保留最短/最长间隔滑块）
+    (function () {
       var proState = pageEl.querySelector("#proactive-state-label");
       var proMinS = pageEl.querySelector("#proactive-min-slider");
       var proMaxS = pageEl.querySelector("#proactive-max-slider");
@@ -770,30 +761,11 @@ window.MineContacts = (function () {
       var proNotifyChat = function () {
         if (window.MineChat && MineChat.refreshProactive) MineChat.refreshProactive();
       };
-      // 刷新"主动消息"行状态标签
+      // 刷新"主动消息"行状态标签（始终已开启）
       var proRefreshState = function () {
         if (!proState) return;
-        proState.textContent = c.proactiveOn === true
-          ? ("已开启 · " + formatProactiveLabel(c.proactiveMin) + " ~ " + formatProactiveLabel(c.proactiveMax))
-          : "已关闭";
+        proState.textContent = "已开启 · " + formatProactiveLabel(c.proactiveMin) + " ~ " + formatProactiveLabel(c.proactiveMax);
       };
-
-      proToggle.addEventListener("change", function () {
-        c.proactiveOn = this.checked;
-        if (c.proactiveOn) {
-          // 首次开启：默认 1 小时 ~ 12 小时
-          if (c.proactiveMin === undefined) c.proactiveMin = 60;
-          if (c.proactiveMax === undefined) c.proactiveMax = 720;
-          if (proMinS) proMinS.value = c.proactiveMin;
-          if (proMaxS) proMaxS.value = c.proactiveMax;
-          if (proMinL) proMinL.textContent = formatProactiveLabel(c.proactiveMin);
-          if (proMaxL) proMaxL.textContent = formatProactiveLabel(c.proactiveMax);
-        }
-        if (proSliders) proSliders.style.display = c.proactiveOn ? "" : "none";
-        proRefreshState();
-        save();
-        proNotifyChat();
-      });
 
       // 最短间隔滑块（不超过最长间隔）
       if (proMinS) {
@@ -832,7 +804,7 @@ window.MineContacts = (function () {
           proNotifyChat();
         });
       }
-    }
+    })();
 
     // 添加字卡（空格分割批量添加 + 拼音排序）
     var addInput = pageEl.querySelector("#card-add-text");
