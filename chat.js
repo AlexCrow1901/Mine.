@@ -1384,7 +1384,6 @@ window.MineChat = (function () {
     if (!C || !C.getState) return targets;
     var st = C.getState();
     (st.contacts || []).forEach(function (c) {
-      if (c.proactiveOn !== true) return;
       if (!c.cards || c.cards.length === 0) return;
       targets.push({
         schedKey: "contact:" + c.id,
@@ -1401,7 +1400,6 @@ window.MineChat = (function () {
           if (st.contacts[i].id === mid) { m = st.contacts[i]; break; }
         }
         if (!m) return;
-        if (m.proactiveOn !== true) return;
         if (!gHasCards && (!m.cards || m.cards.length === 0)) return;
         targets.push({
           schedKey: "group:" + g.id + "|" + m.id,
