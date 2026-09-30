@@ -282,6 +282,41 @@ window.MineChat = (function () {
     appLevelSeen = false;  // 新消息到达 → 主屏角标重新显示
     saveUnread();
     if (window.MineNotify) MineNotify.refreshBadges();
+    // 后台保活：页面不在前台时弹出系统通知
+    if (window.MineKeepalive && document.visibilityState !== "visible") {
+      var info = convNotifyInfo(convKey);
+      MineKeepalive.notify(info.title, info.body);
+    }
+  }
+
+  /* ---------------- 系统通知文案解析 ---------------- */
+  function msgPreviewText(m) {
+    var t = String((m && m.text) || "").replace(/\s+/g, " ").trim();
+    if (t.indexOf("data:image/") === 0) return "[图片]";
+    if (t.indexOf("data:audio/") === 0) return "[语音]";
+    return t.length > 40 ? t.slice(0, 40) + "…" : (t || "新消息");
+  }
+  function convNotifyInfo(convKey) {
+    var ci = convKey.indexOf(":");
+    var type = convKey.slice(0, ci);
+    var id = convKey.slice(ci + 1);
+    var title = "Mine";
+    var body = "你收到一条新消息";
+    var msgs = conversations[convKey] || [];
+    var last = msgs[msgs.length - 1];
+    if (type === "contact") {
+      var c = C.findContact ? C.findContact(id) : null;
+      title = c ? c.name : "联系人";
+      if (last) body = msgPreviewText(last);
+    } else if (type === "group") {
+      var g = C.findGroup ? C.findGroup(id) : null;
+      title = g ? g.name : "群聊";
+      if (last) {
+        var who = last.senderName || (last.from === "me" ? "我" : "群成员");
+        body = who + "：" + msgPreviewText(last);
+      }
+    }
+    return { title: title, body: body };
   }
   function clearUnread(convKey) {
     if (unreadCounts[convKey]) {
@@ -1561,6 +1596,10 @@ window.MineChat = (function () {
 
   /* 页面重新可见时补查已到期的主动消息（后台页签计时可能被浏览器节流） */
   document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") initProactive();
+  });
+  /* 后台保活：心跳检测到"时间跳跃"（后台被节流）后，回到前台时补查到期消息 */
+  document.addEventListener("mine:timeskip", function () {
     if (document.visibilityState === "visible") initProactive();
   });
 
