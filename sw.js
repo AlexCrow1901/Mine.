@@ -14,7 +14,7 @@
    说明：通知是否弹出仍受浏览器通知权限 + 手机系统通知设置控制。
    版本：v3（缓存名含版本，升级时浏览器自动更新）
    ======================================================================== */
-var CACHE_NAME = "mine-cache-v3";
+var CACHE_NAME = "mine-cache-v4";
 
 /* 核心资源全量预缓存（版本号与 index.html 中的 ?vN 保持一致；
    版本升级时同步更新本列表，确保离线时拉到的都是最新文件） */
@@ -46,7 +46,7 @@ var CORE_ASSETS = [
   "storage.js?v3",
   "utils.js?v8",
   "notify.js?v1",
-  "keepalive.js?v6",
+  "keepalive.js?v7",
   "settings.js?v11",
   "icons.js?v16",
   "background.js?v10",
@@ -264,20 +264,30 @@ function psyncIdbSet(key, val) {
     });
   });
 }
-/* 页面全关后定期唤醒：弹最新一条未提醒的后台消息，弹完即从快照移除 */
+/* 页面全关后定期唤醒：聚合弹所有未提醒的后台消息（微信式：每条一行 + 条数），
+   一次弹完即清空快照 */
 self.addEventListener("periodicsync", function (e) {
   if (e.tag !== PSYNC_TAG) return;
   e.waitUntil((async function () {
     var snap = await psyncIdbGet(PSYNC_SNAP_KEY);
     if (!snap || !Array.isArray(snap.texts) || !snap.texts.length) return;
     if (!snap.ts || Date.now() - snap.ts > PSYNC_SNAP_TTL) return;
-    var item = snap.texts[snap.texts.length - 1]; // 最新一条
-    if (!item || !item.t) return;
-    snap.texts = snap.texts.slice(0, -1);          // 弹完移除
+    var items = snap.texts.map(function (x) { return (x && x.t) || ""; }).filter(Boolean);
+    if (!items.length) return;
+    var n = items.length;
+    var AGG_MAX_SHOW = 4;
+    var show = items.slice(-AGG_MAX_SHOW);
+    var body = show.join("\n");
+    var title = snap.name || "Mine";
+    if (n > 1) {
+      title = title + "（" + n + " 条新消息）";
+      if (n > AGG_MAX_SHOW) body += "\n… 共 " + n + " 条新消息";
+    }
+    snap.texts = [];                 // 全部弹完
     await psyncIdbSet(PSYNC_SNAP_KEY, snap);
-    await self.registration.showNotification(snap.name || "Mine", {
-      body: item.t || "",
-      tag: PSYNC_TAG,
+    await self.registration.showNotification(title, {
+      body: body,
+      tag: "mine-" + ((snap && snap.convKey) || "all"),
       renotify: true,
       icon: "icons/icon-192.png",
       badge: "icons/icon-192.png",
