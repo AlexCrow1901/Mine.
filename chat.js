@@ -1192,19 +1192,21 @@ window.MineChat = (function () {
       var allResponders = pickRandomMembers(group, 999);
       if (allResponders.length === 0) return;
       var numReply;
-      if (allResponders.length <= 2) {
-        // ≤2人：第二条回复概率可自定义（默认 40%）
-        numReply = Math.random() < (1 - prob("groupSecond")) ? 1 : 2;
-      } else {
-        // ≥3人：1人 50% / 2人 30% 为基础；
-        // "群聊第三条回复"（默认 15%）→ 3 人，"群聊全员回复"（默认 5%）→ 全部；
-        // 剩余概率按 1人 : 2人 = 5 : 3 分配（回落，保持原默认分布不变）
-        var pThird = prob("groupThird");
-        var pAll = prob("groupAll");
-        var r = Math.random();
-        if (r < pThird) numReply = 3;
-        else if (r < pThird + pAll) numReply = allResponders.length;
-        else numReply = (Math.random() < 0.625) ? 1 : 2;
+      /* 群聊回复人数：逐条累计模型（对任意人数群聊生效）
+         · 第一条回复：必然 1 人
+         · 第二条回复：命中"群聊第二条回复"概率（默认 40%，需 ≥2 人可回复）→ 回复人数 +1
+         · 第三条回复：已有 ≥2 人回复时，命中"群聊第三条回复"概率（默认 15%，需 ≥3 人可回复）→ 回复人数 +1
+         · 全员回复：已有 ≥3 人回复时，命中"群聊全员回复"概率（默认 5%，需 ≥4 人可回复）→ 全部成员回复
+         · 每级独立判定，最大不超过可回复成员数 */
+      numReply = 1;
+      if (allResponders.length >= 2 && Math.random() < prob("groupSecond")) {
+        numReply = Math.min(numReply + 1, allResponders.length);
+      }
+      if (allResponders.length >= 3 && numReply >= 2 && Math.random() < prob("groupThird")) {
+        numReply = Math.min(numReply + 1, allResponders.length);
+      }
+      if (allResponders.length >= 4 && numReply >= 3 && Math.random() < prob("groupAll")) {
+        numReply = allResponders.length;
       }
       var responders = allResponders.slice(0, Math.min(numReply, allResponders.length));
       if (responders.length === 0) return;

@@ -117,9 +117,9 @@ window.MineProbs = (function () {
         { key: "sysCard",      name: "系统字卡发送", desc: "回复时发送系统字卡的概率（所有联系人可用）" },
         { key: "emojiAttach",  name: "文字附带 emoji", desc: "文字回复时附带 emoji 字卡的概率" },
         { key: "silentChance", name: "自动回复沉默", desc: "触发自动回复（而非普通回复）的概率" },
-        { key: "groupSecond",  name: "群聊第二条回复", desc: "群聊（≤2 人）出现第二条回复的概率" },
-        { key: "groupThird",   name: "群聊第三条回复", desc: "群聊（≥3 人）出现第三条回复的概率" },
-        { key: "groupAll",     name: "群聊全员回复", desc: "群聊（≥3 人）全部成员都回复的概率" }
+        { key: "groupSecond",  name: "群聊第二条回复", desc: "群聊出现第二条回复的概率（任意人数群聊均生效，需至少 2 人可回复）" },
+        { key: "groupThird",   name: "群聊第三条回复", desc: "群聊出现第三条回复的概率（需至少 3 人可回复）" },
+        { key: "groupAll",     name: "群聊全员回复", desc: "群聊全部成员都回复的概率（需至少 4 人可回复）" }
       ]
     },
     {
