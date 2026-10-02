@@ -43,7 +43,7 @@ var CORE_ASSETS = [
   "utils.js?v8",
   "notify.js?v1",
   "keepalive.js?v3",
-  "settings.js?v5",
+  "settings.js?v6",
   "icons.js?v16",
   "background.js?v9",
   "contacts.js?v20",
