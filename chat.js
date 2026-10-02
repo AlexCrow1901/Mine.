@@ -1,4 +1,4 @@
- /* ========================================================================
+/* ========================================================================
    Mine · 聊天模块
    ------------------------------------------------------------------------
    功能：
@@ -68,27 +68,107 @@ window.MineChat = (function () {
   }
   /* ==================== 每个会话的自定义背景图 ====================
      chatBg: { "contact:c1": "data:image/...", "group:g1": "data:image/..." }
-     使用 localStorage 存储（图片经压缩，单张约 100~200KB） */
+     存储：IndexedDB "mine-chat-bg"（容量远大于 localStorage，避免大图
+     写入失败导致"背景闪现一下就消失"）；旧 localStorage 数据自动迁移。 */
   var chatBg = {};
+  var chatBgLoaded = false;
+  function chatBgDbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open("mine-chat-bg", 1);
+      req.onupgradeneeded = function () {
+        try {
+          if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+        } catch (e) {}
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function chatBgDbPut(key, val) {
+    return chatBgDbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put(val, key);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { reject(tx.error); };
+        } catch (e) { reject(e); }
+      });
+    });
+  }
+  function chatBgDbDel(key) {
+    return chatBgDbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").delete(key);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { reject(tx.error); };
+        } catch (e) { reject(e); }
+      });
+    });
+  }
   function loadBg() {
-    try {
-      var raw = localStorage.getItem(BG_KEY);
-      if (raw) chatBg = JSON.parse(raw) || {};
-    } catch (e) {}
-    if (!chatBg) chatBg = {};
+    chatBgLoaded = false;
+    var bgMap = {};
+    chatBgDbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx = db.transaction("kv", "readonly");
+          var cur = tx.objectStore("kv").openCursor();
+          cur.onsuccess = function () {
+            var c = cur.result;
+            if (c) { bgMap[c.key] = c.value; c.continue(); }
+            else resolve(bgMap);
+          };
+          cur.onerror = function () { reject(cur.error); };
+        } catch (e) { reject(e); }
+      });
+    }).then(function (bgMap) {
+      /* 旧 localStorage 数据迁移（一次性） */
+      try {
+        var raw = localStorage.getItem(BG_KEY);
+        if (raw) {
+          var legacy = JSON.parse(raw) || {};
+          Object.keys(legacy).forEach(function (k) {
+            if (legacy[k] && !bgMap[k]) {
+              bgMap[k] = legacy[k];
+              chatBgDbPut(k, legacy[k]);
+            }
+          });
+          try { localStorage.removeItem(BG_KEY); } catch (e) {}
+        }
+      } catch (e) {}
+      chatBg = bgMap;
+      chatBgLoaded = true;
+      if (ctx && ctx.convKey && pageEl) applyConvBg();
+      if (pageEl) applyChatFontColor();
+    }).catch(function () {
+      /* IDB 不可用 → 兜底读旧 localStorage */
+      try {
+        var raw = localStorage.getItem(BG_KEY);
+        if (raw) chatBg = JSON.parse(raw) || {};
+      } catch (e) {}
+      chatBgLoaded = true;
+    });
   }
   function saveBg() {
-    try { localStorage.setItem(BG_KEY, JSON.stringify(chatBg)); } catch (e) {
-      showToast("背景图片过大，无法保存");
-    }
+    /* 全部落 IDB（异步写入，失败静默——背景仍保留在内存） */
+    Object.keys(chatBg).forEach(function (k) {
+      chatBgDbPut(k, chatBg[k]).catch(function () {});
+    });
   }
   function getConvBg(convKey) {
     return chatBg[convKey] || null;
   }
   function setConvBg(convKey, dataUrl) {
-    if (dataUrl) { chatBg[convKey] = dataUrl; }
-    else { delete chatBg[convKey]; }
-    saveBg();
+    if (dataUrl) {
+      chatBg[convKey] = dataUrl;
+      chatBgDbPut(convKey, dataUrl).catch(function () {});
+    } else {
+      delete chatBg[convKey];
+      chatBgDbDel(convKey).catch(function () {});
+    }
   }
   /* 将背景图应用到聊天页 DOM */
   function applyConvBg() {
@@ -1739,7 +1819,7 @@ window.MineChat = (function () {
     var fn = window.showToast || (window.MineUtils && MineUtils.showToast) || function () {};
     try { fn(text); } catch (err) {}
   });
-  return {
+  var api = {
     openContact: openContact,
     openGroup: openGroup,
     openConvList: openConvList,
@@ -1747,6 +1827,15 @@ window.MineChat = (function () {
     searchHistory: searchHistory,
     getTotalUnread: getTotalUnread,
     clearAllUnread: clearAllUnread,
-    refreshConvListBadges: openConvList
+    refreshConvListBadges: openConvList,
+    /* 会话背景读写（背景管理器按联系人/群聊设置背景时调用） */
+    setConvBg: setConvBg,
+    getConvBg: getConvBg
   };
+
+  /* 模块启动即预加载会话背景（IndexedDB 异步），
+     避免首次进入主屏/会话时背景尚未从存储恢复 */
+  loadBg();
+
+  return api;
 })();
