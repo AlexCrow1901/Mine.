@@ -253,6 +253,64 @@
       // 初始刷新角标
       MineNotify.refreshBadges();
     }
+    initUpdateNotify();
+  }
+  /* ---------------- 更新提醒（SW 受控更新） ----------------
+     部署新版本（sw.js 内容变化）后，浏览器在下次打开/刷新页面时检测到
+     新 SW 进入 waiting → 顶部弹"发现新版本"横幅：
+     · 立即更新：向 SW 发 SKIP_WAITING → 接管 → controllerchange → 刷新
+     · 稍后更新：关闭横幅；新版本保持等待，下次打开页面再提醒
+     更新只替换缓存文件，聊天记录等本地数据（localStorage/IndexedDB）
+     不受任何影响。 */
+  function initUpdateNotify() {
+    if (!("serviceWorker" in navigator)) return;
+    var bannerShown = false;
+    function showBanner(worker) {
+      if (bannerShown) return;
+      bannerShown = true;
+      try {
+        if (document.querySelector(".update-banner")) return;
+      } catch (e) {}
+      var el = document.createElement("div");
+      el.className = "update-banner";
+      el.innerHTML =
+        '<div class="update-banner-text">发现新版本，更新后聊天记录等本地内容不受影响</div>' +
+        '<div class="update-banner-actions">' +
+          '<button class="update-banner-btn is-primary" id="update-now">立即更新</button>' +
+          '<button class="update-banner-btn" id="update-later">稍后</button>' +
+        '</div>';
+      document.body.appendChild(el);
+      el.querySelector("#update-now").addEventListener("click", function () {
+        if (worker && worker.postMessage) {
+          try { worker.postMessage({ type: "SKIP_WAITING" }); } catch (e) {}
+        }
+      });
+      el.querySelector("#update-later").addEventListener("click", function () {
+        el.remove();
+      });
+    }
+    function trackInstalling(worker) {
+      if (!worker) return;
+      worker.addEventListener("statechange", function () {
+        /* 新版本已下载完成；若有旧页面在运行（controller 存在）→ 提示更新 */
+        if (worker.state === "installed" && navigator.serviceWorker.controller) {
+          showBanner(worker);
+        }
+      });
+    }
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.ready.then(function (reg) {
+        if (reg.waiting) { showBanner(reg.waiting); return; }
+        if (reg.installing) { trackInstalling(reg.installing); return; }
+        reg.addEventListener("updatefound", function () {
+          trackInstalling(reg.installing);
+        });
+      }).catch(function () {});
+    });
+    /* 新 SW 接管 → 刷新页面完成更新 */
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (bannerShown) location.reload();
+    });
   }
   /* ---------------- 公共方法 ---------------- */
   APP.goHome = goHome;

@@ -1,5 +1,5 @@
 /* ========================================================================
-   Mine · Service Worker (v3)
+   Mine · Service Worker (v4)
    ------------------------------------------------------------------------
    作用（参考 mochi 方案）：
    1. 后台通知通道：页面 JS 被系统冻结 / 手机锁屏时，仍可用
@@ -11,10 +11,13 @@
       调度频率由系统定，约数小时一次）。
    3. 完整离线缓存：安装时预缓存全部核心资源（HTML/CSS/JS/图标/manifest），
       网络优先，失败回退缓存 —— 首次打开后离线/弱网可完整使用。
+   4. 更新提醒（受控更新）：新版本进入 waiting 待装，页面弹"发现新版本"
+      提醒；点"立即更新"发 SKIP_WAITING → 接管刷新；点"稍后"保持等待，
+      下次打开页面再提醒。更新只替换缓存文件，不清除聊天记录等本地数据。
    说明：通知是否弹出仍受浏览器通知权限 + 手机系统通知设置控制。
-   版本：v3（缓存名含版本，升级时浏览器自动更新）
+   版本：v4（缓存名含版本，升级时浏览器自动更新）
    ======================================================================== */
-var CACHE_NAME = "mine-cache-v4";
+var CACHE_NAME = "mine-cache-v5";
 
 /* 核心资源全量预缓存（版本号与 index.html 中的 ?vN 保持一致；
    版本升级时同步更新本列表，确保离线时拉到的都是最新文件） */
@@ -27,7 +30,7 @@ var CORE_ASSETS = [
   "icons/icon-maskable-192.png",
   "icons/icon-maskable-512.png",
   "theme.css?v6",
-  "base.css?v8",
+  "base.css?v9",
   "home.css?v7",
   "components.css?v17",
   "contacts.css?v9",
@@ -66,13 +69,14 @@ var CORE_ASSETS = [
   "contact-moments.js?v1",
   "theme-manager.js?v4",
   "files.js?v1",
-  "app.js?v13",
+  "app.js?v14",
   "sw.js"
 ];
 
-/* ---------------- 安装：跳过等待 + 预缓存全部核心资源 ---------------- */
+/* ---------------- 安装：预缓存全部核心资源 ----------------
+   受控更新：不在此处无条件 skipWaiting —— 更新版本进入 waiting 待装，
+   由页面弹"发现新版本"提醒，用户确认后才 SKIP_WAITING 接管（可稍后）。 */
 self.addEventListener("install", function (e) {
-  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then(function (c) {
       return c.addAll(CORE_ASSETS).catch(function () {});
@@ -94,7 +98,7 @@ self.addEventListener("activate", function (e) {
   );
 });
 
-/* ---------------- 消息：外部触发刷新缓存 ---------------- */
+/* ---------------- 消息：外部触发刷新缓存 / 确认接管更新 ---------------- */
 self.addEventListener("message", function (e) {
   var data = e.data || {};
   if (data.type === "PRECACHE_NOW") {
@@ -103,6 +107,10 @@ self.addEventListener("message", function (e) {
         return c.addAll(CORE_ASSETS).catch(function () {});
       })
     );
+  }
+  /* 用户点击"立即更新" → 跳过等待，接管页面 */
+  if (data.type === "SKIP_WAITING") {
+    self.skipWaiting();
   }
 });
 
