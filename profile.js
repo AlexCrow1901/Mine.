@@ -71,44 +71,24 @@ window.MineProfile = (function () {
         avatarInner +
       '</div>' +
       '<span class="profile-name" id="me-name-display">' + escapeHtml(meProfile.name || "雾客") + '</span>' +
-      '<span class="profile-status">在"个性化"中修改昵称与头像</span>' +
+      '<span class="profile-status">在"我的"中修改昵称与头像</span>' +
       '</div>';
 
     html += '<div class="list-sep"></div>';
 
-    // 个性化：昵称 / 头像 / 背景
-    html += '<div class="group-head">个性化</div>';
-
-    // 昵称
-    html += '<div class="me-edit-row">' +
-      '<input type="text" class="field-input me-name-input" id="me-name-input" ' +
-      'value="' + escapeHtml(meProfile.name || "雾客") + '" ' +
-      'placeholder="输入你的昵称" maxlength="20">' +
-      '<button class="btn btn-primary btn-sm" id="me-name-save">保存</button>' +
-      '</div>';
-
-    // 头像
-    html += '<div class="func-row" role="button" tabindex="0" data-act="change-avatar">' +
-      '<div class="func-icon">' + I.svg("camera", 20) + '</div>' +
+    // 我的：昵称 + 头像合并为"我的资料"
+    html += '<div class="group-head">我的</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-me">' +
+      '<div class="func-icon">' + I.svg("me", 20) + '</div>' +
       '<div class="func-text">' +
-        '<span class="func-title">更换头像</span>' +
-        '<span class="func-sub">从相册选择图片</span>' +
+        '<span class="func-title">我的资料</span>' +
+        '<span class="func-sub">昵称与头像</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
-    if (meProfile.avatar) {
-      html += '<div class="func-row" role="button" tabindex="0" data-act="remove-avatar">' +
-        '<div class="func-icon">' + I.svg("trash", 20) + '</div>' +
-        '<div class="func-text">' +
-          '<span class="func-title">移除头像</span>' +
-          '<span class="func-sub">恢复默认文字头像</span>' +
-        '</div>' +
-        '<span class="chevron">' + I.svg("back", 18) + '</span>' +
-      '</div>';
-    }
-
-    // 背景
+    // 个性化：背景
+    html += '<div class="group-head">个性化</div>';
     html += '<div class="func-row" role="button" tabindex="0" data-act="open-background">' +
       '<div class="func-icon">' + I.svg("background", 20) + '</div>' +
       '<div class="func-text">' +
@@ -117,8 +97,6 @@ window.MineProfile = (function () {
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
-
-    html += '<input type="file" accept="image/*" id="me-avatar-file" class="file-hidden">';
 
     html += '<div class="list-sep"></div>';
 
@@ -129,6 +107,16 @@ window.MineProfile = (function () {
       '<div class="func-text">' +
         '<span class="func-title">我的字卡</span>' +
         '<span class="func-sub">公用字卡所有联系人可用，单独字卡仅指定联系人使用</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+
+    // 系统字卡（内容后期新增）
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-sys-cards">' +
+      '<div class="func-icon">' + I.svg("bookmark", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">系统字卡</span>' +
+        '<span class="func-sub">系统预置字卡，即将上线</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
@@ -187,56 +175,104 @@ window.MineProfile = (function () {
       });
     }
 
-    // 更换头像 → 选择文件
-    var fileEl = pageEl.querySelector("#me-avatar-file");
-    var changeAvatarBtn = pageEl.querySelector('[data-act="change-avatar"]');
-    if (changeAvatarBtn && fileEl) {
-      var openPicker = function () { fileEl.click(); };
-      changeAvatarBtn.addEventListener("click", openPicker);
-      changeAvatarBtn.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); }
+    // 我的资料入口 → 打开资料编辑面板
+    var meBtn = pageEl.querySelector('[data-act="open-me"]');
+    if (meBtn) {
+      meBtn.addEventListener("click", openMeSheet);
+      meBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMeSheet(); }
       });
     }
 
-    // 文件选择 → 压缩 → 保存
-    if (fileEl) {
-      fileEl.addEventListener("change", function () {
-        if (this.files && this.files[0]) {
-          var f = this.files[0];
-          if (U && U.compressImage) {
-            U.compressImage(f, 200, 0.85, function (dataURL) {
-              if (!dataURL) return;
-              meProfile.avatar = dataURL;
-              saveMe();
-              renderPage(); // 重新渲染
-            });
-          }
-          this.value = "";
-        }
+    // 系统字卡入口 → 占位提示（内容后期新增）
+    var sysCardsBtn = pageEl.querySelector('[data-act="open-sys-cards"]');
+    if (sysCardsBtn) {
+      sysCardsBtn.addEventListener("click", function () {
+        showToast("系统字卡即将上线，敬请期待");
+      });
+      sysCardsBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showToast("系统字卡即将上线，敬请期待"); }
       });
     }
+  }
 
-    // 移除头像
-    var removeBtn = pageEl.querySelector('[data-act="remove-avatar"]');
-    if (removeBtn) {
-      removeBtn.addEventListener("click", function () {
-        meProfile.avatar = null;
-        saveMe();
-        renderPage();
-      });
-      removeBtn.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          meProfile.avatar = null;
-          saveMe();
-          renderPage();
-        }
-      });
+  /* ==================== "我的资料"编辑面板 ==================== */
+  var meSheetEl = null;
+  var meOverlayEl = null;
+
+  function openMeSheet() {
+    if (!meSheetEl) {
+      meOverlayEl = document.createElement("div");
+      meOverlayEl.className = "sheet-overlay";
+      meOverlayEl.addEventListener("click", closeMeSheet);
+
+      meSheetEl = document.createElement("div");
+      meSheetEl.className = "sheet";
+      meSheetEl.innerHTML =
+        '<div class="sheet-handle"></div>' +
+        '<div class="sheet-head"><h2>我的资料</h2>' +
+        '<button class="nav-btn" data-act="close">' + I.svg("close", 20) + '</button></div>' +
+        '<div class="sheet-body" id="me-sheet-body"></div>';
+      document.body.appendChild(meOverlayEl);
+      document.body.appendChild(meSheetEl);
+      meSheetEl.querySelector('[data-act="close"]').addEventListener("click", closeMeSheet);
+    }
+    renderMeSheet();
+    requestAnimationFrame(function () {
+      meOverlayEl.classList.add("is-open");
+      meSheetEl.classList.add("is-open");
+    });
+  }
+  function closeMeSheet() {
+    if (!meSheetEl) return;
+    meOverlayEl.classList.remove("is-open");
+    meSheetEl.classList.remove("is-open");
+  }
+
+  function renderMeSheet() {
+    var body = document.getElementById("me-sheet-body");
+    if (!body) return;
+
+    var html =
+      '<div class="me-sheet-preview">' + avatarHTML(72, "me-sheet-avatar") + '</div>' +
+      '<div class="group-head">昵称</div>' +
+      '<div class="me-edit-row">' +
+        '<input type="text" class="field-input me-name-input" id="me-sheet-name" ' +
+          'value="' + escapeHtml(meProfile.name || "雾客") + '" ' +
+          'placeholder="输入你的昵称" maxlength="20">' +
+        '<button class="btn btn-primary btn-sm" id="me-sheet-save">保存</button>' +
+      '</div>' +
+      '<div class="group-head">头像</div>' +
+      '<div class="func-row" role="button" tabindex="0" data-act="me-sheet-avatar">' +
+        '<div class="func-icon">' + I.svg("camera", 20) + '</div>' +
+        '<div class="func-text">' +
+          '<span class="func-title">更换头像</span>' +
+          '<span class="func-sub">从相册选择图片</span>' +
+        '</div>' +
+        '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+
+    if (meProfile.avatar) {
+      html += '<div class="func-row" role="button" tabindex="0" data-act="me-sheet-remove">' +
+        '<div class="func-icon">' + I.svg("trash", 20) + '</div>' +
+        '<div class="func-text">' +
+          '<span class="func-title">移除头像</span>' +
+          '<span class="func-sub">恢复默认文字头像</span>' +
+        '</div>' +
+        '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
     }
 
+    html += '<input type="file" accept="image/*" id="me-sheet-file" class="file-hidden">';
+
+    body.innerHTML = html;
+    bindMeSheetEvents(body);
+  }
+
+  function bindMeSheetEvents(body) {
     // 昵称保存
-    var nameInput = pageEl.querySelector("#me-name-input");
-    var nameSave = pageEl.querySelector("#me-name-save");
+    var nameInput = body.querySelector("#me-sheet-name");
+    var nameSave = body.querySelector("#me-sheet-save");
     if (nameInput && nameSave) {
       var doSave = function () {
         var val = (nameInput.value || "").trim();
@@ -248,17 +284,66 @@ window.MineProfile = (function () {
         }
         meProfile.name = val;
         saveMe();
-        // 更新主界面问候语
-        if (window.MineApp && window.MineApp.refreshGreeting) {
-          window.MineApp.refreshGreeting();
-        }
+        if (window.MineApp && window.MineApp.refreshGreeting) window.MineApp.refreshGreeting();
         renderPage();
+        renderMeSheet();
+        showToast("昵称已保存");
       };
       nameSave.addEventListener("click", doSave);
       nameInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") doSave();
       });
     }
+
+    // 更换头像
+    var fileEl = body.querySelector("#me-sheet-file");
+    var avatarBtn = body.querySelector('[data-act="me-sheet-avatar"]');
+    if (avatarBtn && fileEl) {
+      var openPicker = function () { fileEl.click(); };
+      avatarBtn.addEventListener("click", openPicker);
+      avatarBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); }
+      });
+      fileEl.addEventListener("change", function () {
+        if (this.files && this.files[0]) {
+          var f = this.files[0];
+          if (U && U.compressImage) {
+            U.compressImage(f, 200, 0.85, function (dataURL) {
+              if (!dataURL) return;
+              meProfile.avatar = dataURL;
+              saveMe();
+              renderPage();
+              renderMeSheet();
+            });
+          }
+          this.value = "";
+        }
+      });
+    }
+
+    // 移除头像
+    var removeBtn = body.querySelector('[data-act="me-sheet-remove"]');
+    if (removeBtn) {
+      removeBtn.addEventListener("click", function () {
+        meProfile.avatar = null;
+        saveMe();
+        renderPage();
+        renderMeSheet();
+      });
+    }
+  }
+
+  function showToast(msg) {
+    try {
+      if (U && U.showToast) { U.showToast(msg); return; }
+    } catch (e) {}
+    try {
+      var t = document.createElement("div");
+      t.className = "mini-toast";
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(function () { t.remove(); }, 2000);
+    } catch (e) {}
   }
 
   /* ---------------- 初始化 ---------------- */

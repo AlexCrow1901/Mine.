@@ -100,11 +100,13 @@ window.MineProbs = (function () {
   /* ==================== 管理面板 ==================== */
   var sheetEl = null;
   var overlayEl = null;
+  var currentTab = "cards";   // "cards"（字卡概率）| "phone"（电话概率）
 
-  /* 分组：聊天 / 电话 */
+  /* 分组：字卡 / 电话（面板通过 tab 切换显示） */
   var GROUPS = [
     {
-      title: "聊天",
+      key: "cards",
+      title: "字卡概率",
       items: [
         { key: "imageCard",    name: "图片字卡发送", desc: "对方回复时发送图片字卡的概率" },
         { key: "emojiCard",    name: "emoji 字卡发送", desc: "对方回复时发送 emoji 字卡的概率" },
@@ -115,7 +117,8 @@ window.MineProbs = (function () {
       ]
     },
     {
-      title: "电话",
+      key: "phone",
+      title: "电话概率",
       items: [
         { key: "phoneIncoming",        name: "主动来电", desc: "联系人每小时主动来电的概率" },
         { key: "phoneHangup",          name: "呼出被挂断", desc: "拨出时对方直接挂断的概率" },
@@ -163,8 +166,17 @@ window.MineProbs = (function () {
     if (!body) return;
     load();
 
-    var html = '<div class="card-hint">修改范围为 0~100%，点击加减号或直接输入数字，立即生效</div>';
+    /* tab：修改字卡 / 修改电话 */
+    var tabs =
+      '<div class="card-tabs">' +
+        '<button class="card-tab' + (currentTab === "cards" ? " is-active" : "") + '" data-tab="cards">字卡概率</button>' +
+        '<button class="card-tab' + (currentTab === "phone" ? " is-active" : "") + '" data-tab="phone">电话概率</button>' +
+      '</div>';
+
+    var html = tabs +
+      '<div class="card-hint">修改范围为 0~100%，点击加减号或直接输入数字，立即生效</div>';
     GROUPS.forEach(function (g) {
+      if (g.key !== currentTab) return;
       html += '<div class="prob-group-title">' + g.title + '</div>';
       html += '<div class="prob-list">' + g.items.map(function (it) {
         var val = state[it.key];
@@ -195,11 +207,19 @@ window.MineProbs = (function () {
   }
 
   function bindEvents(body) {
+    /* tab：字卡概率 / 电话概率 */
+    body.querySelectorAll("[data-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        currentTab = btn.getAttribute("data-tab");
+        render();
+      });
+    });
+
     /* 加减号（±1 / ±5） */
     body.querySelectorAll("[data-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var key = btn.getAttribute("data-step");
-        var delta = parseInt(btn.getAttribute("data-delta"), 10);
+        var delta = parseFloat(btn.getAttribute("data-delta"));
         set(key, get(key) + delta);
         var input = body.querySelector('[data-key="' + key + '"]');
         if (input) input.value = get(key);
