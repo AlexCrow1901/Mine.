@@ -295,6 +295,173 @@
   box-shadow: 0 0 8px var(--accent-glow);
 }
 
+/* ---------- 背景管理 · 模式（白天|黑夜） ---------- */
+.mode-row {
+  display: flex;
+  gap: var(--sp-3);
+}
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  color: var(--t-primary);
+  font-size: 14px;
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.mode-btn:active { background: var(--glass-press); transform: scale(0.97); }
+.mode-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent-soft), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.mode-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--bd-medium);
+  flex-shrink: 0;
+}
+.mode-swatch.mode-day { background: linear-gradient(160deg, #fbf6ec 0%, #ece2cf 100%); }
+.mode-swatch.mode-night { background: linear-gradient(160deg, #23282b 0%, #141719 100%); }
+.mode-sub {
+  font-size: 11px;
+  color: var(--t-tertiary);
+}
+
+/* ---------- 背景管理 · 作用域按钮 ---------- */
+.scope-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-3);
+}
+.scope-row.scope-row-col {
+  grid-template-columns: 1fr;
+}
+.scope-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  color: var(--t-primary);
+  text-align: left;
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.scope-btn:active { background: var(--glass-press); transform: scale(0.97); }
+.scope-btn-all {
+  border-style: dashed;
+  color: var(--accent);
+}
+.scope-name { font-size: 14px; font-weight: 600; }
+.scope-sub { font-size: 11px; color: var(--t-tertiary); }
+
+/* ---------- 背景管理 · 已设置列表 ---------- */
+.bg-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.bg-scope-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.bg-scope-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--bd-soft);
+  flex-shrink: 0;
+}
+.bg-scope-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--t-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bg-scope-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: #c97a7a;
+  flex-shrink: 0;
+}
+.bg-scope-clear:active { background: rgba(180, 90, 90, 0.12); }
+.bg-scope-clear svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+/* ---------- 作用域选择浮层（上传后弹出） ---------- */
+.scope-picker-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  font-size: 13px;
+  color: var(--t-primary);
+}
+.scope-picker-preview .bg-scope-thumb { width: 48px; height: 48px; }
+
+/* ---------- 联系人/群聊选择列表 ---------- */
+.target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--t-primary);
+  font-size: 14px;
+  text-align: left;
+}
+.target-row:active { background: var(--glass-2); }
+.target-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--t-primary);
+  font-size: 12px;
+}
+.target-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------- 上传区 ---------- */
 .upload-zone {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -364,12 +531,13 @@ input[type="range"].slider::-moz-range-thumb {
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-sm);
   background: var(--glass-2);
-  border: 1px solid var(--bd-faint);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   color: var(--t-primary);
   font-size: 13px;
   transition: all var(--dur-fast) var(--ease-soft);
 }
-.font-color-btn:active { background: var(--glass-press); }
+.font-color-btn:active { background: var(--glass-press); transform: scale(0.97); }
 .font-color-btn.is-active {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -406,6 +574,43 @@ input[type="range"].slider::-moz-range-thumb {
   fill: none;
   stroke-width: 2;
 }
+.fc-swatch.fc-custom {
+  background: linear-gradient(135deg, #f97316, #a855f7 55%, #3b82f6);
+}
+
+/* ---------- 自定义字体样式 / 字体颜色 输入行 ---------- */
+.font-custom-row {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.font-custom-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--t-primary);
+  font-size: 13px;
+  outline: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.font-custom-input:focus { border-color: var(--accent); }
+.font-custom-input::placeholder { color: var(--t-faint); }
+.font-custom-apply {
+  flex-shrink: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--accent);
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.font-custom-apply:active { background: var(--glass-press); transform: scale(0.97); }
 
 /* ---------- 开关 ---------- */
 .toggle {
