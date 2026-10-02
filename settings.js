@@ -90,15 +90,24 @@ window.MineSettings = (function () {
   function getCustomIcon() {
     try { return localStorage.getItem(ICON_KEY) || null; } catch (e) { return null; }
   }
-  /* dataURL → 按目标尺寸重绘为 PNG 并触发下载 */
+  /* dataURL → 按目标尺寸重绘为 PNG 并触发下载（严格按原图还原：完整等比 contain，不拉伸不变形，白底，PNG 无损） */
   function downloadPng(dataUrl, filename, size) {
     var img = new Image();
     img.onload = function () {
       try {
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        var scale = Math.min(size / w, size / h);
+        var dw = Math.round(w * scale);
+        var dh = Math.round(h * scale);
         var c = document.createElement("canvas");
         c.width = size; c.height = size;
         var ctx = c.getContext("2d");
-        ctx.drawImage(img, 0, 0, size, size);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, size, size);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, Math.round((size - dw) / 2), Math.round((size - dh) / 2), dw, dh);
         var a = document.createElement("a");
         a.href = c.toDataURL("image/png");
         a.download = filename;
@@ -114,7 +123,48 @@ window.MineSettings = (function () {
     if (!data) return;
     downloadPng(data, size === 512 ? "icon-512.png" : "icon-192.png", size);
   }
-  /* 上传图片 → 压缩为 512px PNG → 写入 IndexedDB（SW 代理即时生效）→ 应用内立即生效 */
+  /* 应用图标生成：严格按照原图还原桌面图标
+     ① 512×512 方形画布（PWA 图标必须方形，系统不会裁切 → 不遮挡）
+     ② 白色底 + 完整等比缩放 contain（原图完整显示 → 不变形/不拉伸变宽）
+     ③ PNG 无损导出（→ 不模糊）；超大图自动降级为高质量 JPEG 兜底 */
+  function makeAppIcon(file, cb) {
+    if (!file || !/^image\//.test(file.type)) { cb(null); return; }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var S = 512;
+          var w = img.naturalWidth || img.width;
+          var h = img.naturalHeight || img.height;
+          var scale = Math.min(S / w, S / h);   // contain：完整放入，不裁剪
+          var dw = Math.round(w * scale);
+          var dh = Math.round(h * scale);
+          var dx = Math.round((S - dw) / 2);
+          var dy = Math.round((S - dh) / 2);
+          var c = document.createElement("canvas");
+          c.width = S; c.height = S;
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";             // 白底（原图外区域）
+          ctx.fillRect(0, 0, S, S);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, dx, dy, dw, dh);
+          var png = c.toDataURL("image/png");
+          /* 超大 PNG 超出 localStorage 容量时降级为高质量 JPEG（极少发生） */
+          if (png.length > 2100000) {
+            png = c.toDataURL("image/jpeg", 0.95);
+          }
+          cb(png);
+        } catch (err) { cb(null); }
+      };
+      img.onerror = function () { cb(null); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function () { cb(null); };
+    reader.readAsDataURL(file);
+  }
+  /* 上传图片 → 生成 512px 方形 PNG → 写入 IndexedDB（SW 代理即时生效）→ 应用内立即生效 */
   function applyCustomIcon(file) {
     if (!file || !/^image\//.test(file.type)) return;
     var done = function (dataURL) {
@@ -126,13 +176,7 @@ window.MineSettings = (function () {
         toast("图标已应用：应用内立即生效；桌面图标将在浏览器同步后自动更新（个别机型未自动更新时，重新添加到主屏幕一次即永久生效）");
       });
     };
-    if (window.MineUtils && MineUtils.compressImage) {
-      MineUtils.compressImage(file, 512, 0.9, done);
-    } else {
-      var reader = new FileReader();
-      reader.onload = function () { done(reader.result); };
-      reader.readAsDataURL(file);
-    }
+    makeAppIcon(file, done);
   }
   function resetCustomIcon() {
     try { localStorage.removeItem(ICON_KEY); } catch (e) {}
@@ -177,11 +221,45 @@ window.MineSettings = (function () {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace( />/g, "&gt;").replace(/"/g, "&quot;");
   }
-  /* 页面加载：若有自定义图标 → manifest 加版本戳，让浏览器持续感知并同步已安装桌面图标 */
+  /* 旧图标自动修复：已上传的旧自定义图若尺寸/格式不合规（非 512 方形 PNG），
+     自动重绘为 512 方形 + 白底 + 完整等比 + PNG 无损，保证桌面图标严格还原原图 */
+  function normalizeStoredIcon(data) {
+    if (!data) return;
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        var isSquare512 = (w === 512 && h === 512) && data.indexOf("data:image/png") === 0;
+        if (isSquare512) return;
+        var S = 512;
+        var scale = Math.min(S / w, S / h);
+        var dw = Math.round(w * scale), dh = Math.round(h * scale);
+        var c = document.createElement("canvas");
+        c.width = S; c.height = S;
+        var ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, S, S);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, Math.round((S - dw) / 2), Math.round((S - dh) / 2), dw, dh);
+        var png = c.toDataURL("image/png");
+        if (png.length > 2100000) png = c.toDataURL("image/jpeg", 0.95);
+        try { localStorage.setItem(ICON_KEY, png); } catch (e) {}
+        iconIdbSet(png, function () { bumpManifestVersion(); });
+      } catch (e) {}
+    };
+    img.onerror = function () {};
+    img.src = data;
+  }
+  /* 页面加载：若有自定义图标 → 规范化旧图 + manifest 加版本戳，让浏览器持续感知并同步已安装桌面图标 */
   (function () {
     setTimeout(function () {
       iconIdbGet(function (data) {
-        if (data) bumpManifestVersion();
+        if (data) {
+          normalizeStoredIcon(data);
+          bumpManifestVersion();
+        }
       });
     }, 600);
   })();
