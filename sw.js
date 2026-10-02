@@ -1,18 +1,69 @@
 /* ========================================================================
-   Mine · Service Worker
+   Mine · Service Worker (v2)
    ------------------------------------------------------------------------
    作用（参考 mochi 方案）：
    1. 后台通知通道：页面 JS 被系统冻结 / 手机锁屏时，仍可用
       registration.showNotification() 弹出系统通知；
       通知被点击时唤醒页面并转发"打开哪个会话"。
-   2. 基础离线缓存：网络优先，失败回退缓存（弱网/离线仍可打开）。
+   2. 完整离线缓存：安装时预缓存全部核心资源（HTML/CSS/JS/图标/manifest），
+      网络优先，失败回退缓存 —— 首次打开后离线/弱网可完整使用。
    说明：通知是否弹出仍受浏览器通知权限 + 手机系统通知设置控制。
-   版本：v1（缓存名含版本，升级时浏览器自动更新）
+   版本：v2（缓存名含版本，升级时浏览器自动更新）
    ======================================================================== */
-var CACHE_NAME = "mine-cache-v1";
-var CORE_ASSETS = ["./"];   // 首页（其余资源按需缓存）
+var CACHE_NAME = "mine-cache-v2";
 
-/* ---------------- 安装：跳过等待 + 预缓存首页 ---------------- */
+/* 核心资源全量预缓存（版本号与 index.html 中的 ?vN 保持一致；
+   版本升级时同步更新本列表，确保离线时拉到的都是最新文件） */
+var CORE_ASSETS = [
+  "./",
+  "./index.html",
+  "manifest.json",
+  "icons/icon-192.png",
+  "icons/icon-512.png",
+  "icons/icon-maskable-192.png",
+  "icons/icon-maskable-512.png",
+  "theme.css?v6",
+  "base.css?v7",
+  "home.css?v6",
+  "components.css?v7",
+  "contacts.css?v9",
+  "chat.css?v30",
+  "companion.css?v2",
+  "profile.css?v1",
+  "mail.css?v4",
+  "treehole.css?v4",
+  "radio.css?v2",
+  "foodie.css?v3",
+  "moments.css?v2",
+  "contact-moments.css?v2",
+  "phone.css?v1",
+  "notify.css?v1",
+  "theme-neumorphism.css?v2",
+  "storage.js?v3",
+  "utils.js?v8",
+  "notify.js?v1",
+  "keepalive.js?v3",
+  "settings.js?v5",
+  "icons.js?v16",
+  "background.js?v9",
+  "contacts.js?v20",
+  "chat.js?v41",
+  "phone.js?v1",
+  "companion.js?v7",
+  "profile.js?v6",
+  "mail.js?v10",
+  "treehole.js?v6",
+  "radio.js?v2",
+  "foodie.js?v3",
+  "moments.js?v3",
+  "contact-moments.js?v1",
+  "theme-manager.js?v2",
+  "files.js?v1",
+  "app.js?v10",
+  "sw.js"
+];
+
+/* ---------------- 安装：跳过等待 + 预缓存全部核心资源 ---------------- */
 self.addEventListener("install", function (e) {
   self.skipWaiting();
   e.waitUntil(
@@ -67,7 +118,12 @@ self.addEventListener("fetch", function (e) {
     }).catch(function () {
       return caches.match(e.request).then(function (hit) {
         if (hit) return hit;
-        return caches.match("./");
+        /* query 版本不同导致未命中时，去掉 query 再试一次 */
+        var noQuery = e.request.url.split("?")[0];
+        return caches.match(noQuery).then(function (hit2) {
+          if (hit2) return hit2;
+          return caches.match("./");
+        });
       });
     })
   );
