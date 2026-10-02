@@ -1,8 +1,9 @@
 /* ========================================================================
    Mine · 背景图管理器
    ------------------------------------------------------------------------
-   重点功能：自由更换背景图。
-   · 预设：纯雾境 / 雾伦敦 / 雾林 / 铅灰 / 冷青 / 暮霭（CSS 渐变预设）
+   重点功能：自由更换背景。
+   · 预设：雾境 / 铅灰 / 冷青 / 暮霭（CSS 渐变预设；默认"雾境"= 无背景图，
+     保持浅色简约观感，跨浏览器表现一致）
    · 上传：本地图片即时预览
    · 调节：雾色叠加 / 背景模糊 / 噪点强度
    · 持久化：localStorage（自定义图尽量以 dataURL 存储，超额则降级为会话级）
@@ -11,16 +12,12 @@
 window.MineBackground = (function () {
   "use strict";
 
-  var ASSET = "";
+  var ASSET = "assets/";
   var STORE_KEY = "mine.bg.v1";
 
-  // 预设列表
+  // 预设列表（仅渐变与无图；图片预设已移除，避免依赖仓库内 jpg 资源）
   var PRESETS = [
     { id: "none",   name: "雾境",   type: "none" },
-    { id: "london", name: "雾伦敦", type: "image", value: ASSET + "bg-london(1).jpg",
-      thumb: ASSET + "bg-london(1).jpg" },
-    { id: "forest", name: "雾林",   type: "image", value: ASSET + "bg-forest(1).jpg",
-      thumb: ASSET + "bg-forest(1).jpg" },
     { id: "lead",   name: "铅灰",   type: "gradient",
       value: "linear-gradient(160deg,#3a4045 0%,#2b3034 50%,#1d2124 100%)",
       thumb: "linear-gradient(160deg,#3a4045,#1d2124)" },
@@ -33,13 +30,13 @@ window.MineBackground = (function () {
   ];
 
   var state = {
-    preset: "london",
-    customUrl: null,        // 自定义图（dataURL 或 objectURL）
+    preset: "none",             // 默认"雾境"：无背景图，跨浏览器统一浅色简约观感
+    customUrl: null,            // 自定义图（dataURL 或 objectURL）
     customType: "image",
     fogTint: 0.34,
-    blur: 0,                // 背景图自身模糊 px
+    blur: 0,                    // 背景图自身模糊 px
     noise: 0.12,
-    fontColor: "white"      // 主界面字体颜色：white | black
+    fontColor: "white"          // 主界面字体颜色：white | black
   };
 
   var el = {};              // 背景层 DOM
@@ -67,7 +64,8 @@ window.MineBackground = (function () {
       var raw = localStorage.getItem(STORE_KEY);
       if (!raw) return;
       var data = JSON.parse(raw);
-      state.preset = data.preset || state.preset;
+      /* 预设合法性校验：历史版本可能存了已移除的图片预设（london/forest），回退为"雾境" */
+      state.preset = (data.preset && presetById(data.preset)) ? data.preset : "none";
       state.fogTint = (typeof data.fogTint === "number") ? data.fogTint : state.fogTint;
       state.blur = (typeof data.blur === "number") ? data.blur : state.blur;
       state.noise = (typeof data.noise === "number") ? data.noise : state.noise;
