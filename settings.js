@@ -210,19 +210,29 @@ window.MineSettings = (function () {
     // 保活不抢其他 App 声音开关
     html += switchRow("set-noduck", "music", "保活不抢其他 App 声音",
       "开启后保活走 WebAudio 通道，不占用媒体通道、不压低音乐（默认开）", prefs.noduck);
-    // 测试通知按钮
+    // 测试通知按钮（排版与开关行一致）
     html += '<div class="func-row">' +
       '<div class="func-icon">' + iconSvg("check", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">测试通知</span>' +
-        '<span class="func-sub">体检权限与通道，并真发一条系统通知</span>' +
+        '<span class="func-sub">发送一条系统通知，验证通道是否就绪</span>' +
       '</div>' +
-      '<button class="chat-bg-btn" id="set-test" style="flex:none;">测试</button>' +
+      '<button class="chat-bg-btn icon-only" id="set-test" aria-label="测试通知">' + iconSvg("bell", 16) + '</button>' +
       '</div>';
     html += '<div id="set-test-result"></div>';
     // 应用图标自定义
     html += '<div class="group-head">应用图标</div>';
     html += iconCard();
+    // 文件管理（入口收进设置）
+    html += '<div class="group-head">文件</div>';
+    html += '<div class="func-row">' +
+      '<div class="func-icon">' + iconSvg("files", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">文件</span>' +
+        '<span class="func-sub">浏览与管理聊天中的文件</span>' +
+      '</div>' +
+      '<button class="chat-bg-btn icon-only" id="set-files" aria-label="打开文件">' + iconSvg("eye", 16) + '</button>' +
+      '</div>';
     html += '<div class="card-hint">自定义桌面图标：上传图片即可，网站内即时生效，无需替换仓库文件、无需重新部署。桌面图标由浏览器自动同步（首次未自动更新时，重新"添加到主屏幕"一次即永久生效）。</div>';
     html += '<div class="card-hint">关闭"消息通知"后将不再弹出系统通知；关闭"后台运行"可节省电量，但后台活跃度会下降。受手机系统省电机制限制，网页后台保活尽力而为。</div>';
     html += '<div class="card-hint">聊天记录与朋友圈数据存储于本地，刷新、关闭、更新网站均不会丢失。</div>';
@@ -248,32 +258,31 @@ window.MineSettings = (function () {
       '</label>' +
       '</div>';
   }
-  /* 应用图标卡片 */
+  /* 应用图标卡片（排版与开关行一致：小预览 + 一行文字 + 右侧按钮） */
   function iconCard() {
     var custom = getCustomIcon();
     var src = custom || "icons/icon-192.png";
     var html = '<div class="func-row">' +
-      '<div class="func-icon" style="width:46px;height:46px;border-radius:12px;overflow:hidden;flex:none;">' +
+      '<div class="func-icon" style="width:30px;height:30px;border-radius:8px;overflow:hidden;flex:none;">' +
         '<img id="set-icon-preview" src="' + src + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">' +
       '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">桌面图标</span>' +
-        '<span class="func-sub">' + (custom ? "已上传自定义图标（网站内即时生效，桌面图标浏览器自动同步）" : "当前为内置 Mine 图标（上传图片即可自定义）") + '</span>' +
+        '<span class="func-sub">' + (custom ? "已使用自定义图标（网站内即时生效）" : "当前为内置图标，可上传自定义") + '</span>' +
       '</div>' +
-      '<button class="chat-bg-btn" id="set-icon-upload" style="flex:none;">' +
-        (custom ? "更换" : "选择图片") + '</button>' +
+      '<button class="chat-bg-btn icon-only" id="set-icon-upload" aria-label="选择图片">' +
+        iconSvg("image", 16) + '</button>' +
       '</div>' +
       '<input type="file" accept="image/*" id="set-icon-file" class="file-hidden">';
     if (custom) {
-      html += '<div class="func-row" style="border-top:none;">' +
+      html += '<div class="func-row">' +
         '<div class="func-icon">' + iconSvg("download", 20) + '</div>' +
         '<div class="func-text">' +
-          '<span class="func-title">导出图标文件（可选）</span>' +
-          '<span class="func-sub">高级用法：下载 PNG 后也可替换仓库 icons/ 目录同名文件，让所有访客都看到你的图标</span>' +
+          '<span class="func-title">导出图标文件</span>' +
+          '<span class="func-sub">下载 PNG 可分享给好友或替换仓库图标</span>' +
         '</div>' +
-        '<button class="chat-bg-btn" id="set-icon-dl512" style="flex:none;">下载 512</button>' +
-        '<button class="chat-bg-btn" id="set-icon-dl192" style="flex:none;margin-left:6px;">下载 192</button>' +
-        '<button class="chat-bg-btn" id="set-icon-reset" style="flex:none;margin-left:6px;">恢复默认</button>' +
+        '<button class="chat-bg-btn icon-only" id="set-icon-dl512" aria-label="导出 PNG">' + iconSvg("download", 16) + '</button>' +
+        '<button class="chat-bg-btn icon-only" id="set-icon-reset" style="margin-left:6px;" aria-label="恢复默认">' + iconSvg("refresh", 16) + '</button>' +
         '</div>';
     }
     return html;
@@ -436,36 +445,37 @@ window.MineSettings = (function () {
         renderTestResult(st);
       });
     }
+    /* 文件入口：打开文件管理页 */
+    var filesBtn = pageEl.querySelector("#set-files");
+    if (filesBtn) {
+      filesBtn.addEventListener("click", function () {
+        if (window.MineApp && MineApp.page) {
+          MineApp.page("files");
+        } else if (window.MineFiles) {
+          MineFiles.renderPage();
+          if (window.MineApp) MineApp.switchPage("detail");
+        }
+      });
+    }
     function renderTestResult(st) {
       if (!resultEl) return;
-      var lines = [];
-      lines.push("Service Worker 通道：" + (st.sw ? "可用" : "不可用"));
-      var permText = String(st.permission || "unknown");
-      if (permText === "granted") permText = "已授予";
-      else if (permText === "denied") permText = "已拒绝";
-      else if (permText === "default") permText = "未授予（默认）";
-      else if (permText === "unsupported") permText = "不支持";
-      lines.push("通知权限：" + permText);
-      if (st.secure !== undefined) {
-        lines.push("安全连接：" + (st.secure ? "是" : "否（通知需要 HTTPS）"));
+      var msg;
+      if (st.requesting) {
+        msg = "正在请求通知权限…请留意浏览器弹窗";
+      } else if (st.sent) {
+        msg = "✓ 已发送一条测试通知，请查看通知栏";
+      } else if (st.permission === "unsupported") {
+        msg = "✗ 当前浏览器不支持系统通知，请用 Chrome 或 Edge";
+      } else if (st.permission === "denied") {
+        msg = "✗ 通知权限被拒绝：打开上方「消息通知」开关重新授权，或按权限状态行指引恢复";
+      } else if (st.permission === "default") {
+        msg = "✗ 未发送：通知权限未授予（弹窗选「允许」后重试；没弹窗＝被浏览器自动阻止，换 Chrome 或卸载重装应用）";
+      } else if (st.hint) {
+        msg = "✗ " + st.hint;
+      } else {
+        msg = "✓ 通知通道正常";
       }
-      if (st.ios !== undefined) {
-        lines.push("iOS 环境：" + (st.ios ? (st.standalone ? "PWA 模式" : "普通网页（通知需添加到主屏幕）") : "否"));
-      }
-      if (st.psync) {
-        var psyncText = st.psync.supported
-          ? (st.psync.standalone ? "可用（页面全关后也会定期补发）" : "需先从桌面图标打开后启用")
-          : "不支持（需 Chromium 内核 + 添加到主屏幕）";
-        lines.push("离线提醒(PSYNC)：" + psyncText);
-      }
-      lines.push("保活通道：" + (st.audioMode === "wa" ? "WebAudio（不抢声音）" : "媒体元素"));
-      lines.push("保活播放中：" + (st.audioPlaying ? "是" : "否"));
-      lines.push("屏幕常亮：" + (st.wakeLock ? "是" : "否"));
-      if (st.requesting) lines.push("正在请求通知权限…请留意浏览器弹窗");
-      if (st.hint) lines.push(st.hint);
-      if (st.sent) lines.push("已发送一条测试通知，请查看通知栏");
-      resultEl.innerHTML = '<div class="card-hint" style="margin-top:8px;">' +
-        lines.map(escapeHtml).join("<br>") + '</div>';
+      resultEl.innerHTML = '<div class="card-hint" style="margin-top:8px;">' + escapeHtml(msg) + '</div>';
     }
   }
   /* ---------------- 暴露接口 ---------------- */
