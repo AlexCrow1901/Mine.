@@ -114,6 +114,7 @@ window.MineCards = (function () {
   }
   function contactName(cid) {
     try {
+      if (C && C.loadData) C.loadData();
       if (C && C.getState) {
         var st = C.getState();
         var list = st.contacts || [];
@@ -126,6 +127,7 @@ window.MineCards = (function () {
   }
   function listContacts() {
     try {
+      if (C && C.loadData) C.loadData();
       if (C && C.getState) return C.getState().contacts || [];
     } catch (e) {}
     return [];
