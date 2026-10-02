@@ -1,16 +1,19 @@
 /* ========================================================================
-   Mine · 背景管理器（v11）
+   Mine · 背景管理器（v13）
    ------------------------------------------------------------------------
    功能（微信式视觉管理，入口在"个人中心 → 背景"）：
-   · 白天 | 黑夜：白天 = 奶油软拟态，黑夜 = 炭黑冷调（替代原右上角主题按钮）
+   · 白天 | 黑夜：白天 = 奶油软拟态，黑夜 = 纯黑
    · 自定义图片分作用域应用：
        global  系统网页背景（主界面全局）
        moments 朋友圈页面背景
        contact 指定联系人聊天背景（按联系人）
        group   指定群聊聊天背景（按群）
      支持"全部同时更换"或单个更换，每个作用域可单独清除
-   · 字体样式（默认/圆体/宋体/楷体/等宽）+ 字体颜色（白/黑/米白/浅蓝/浅绿）
-   · 持久化：localStorage "mine.bg.v1"（兼容旧版 customUrl 自动迁移）
+   · 字体样式（默认/圆体/宋体/楷体/等宽/自定义）+ 字体颜色（白/黑/米白/浅蓝/浅绿/自定义）
+     自定义 = 输入字体样式编码（font-family）或颜色编码（#hex）即可新增
+   · 持久化：图片数据存 IndexedDB "mine-bg"（容量大，修复"自定义背景
+     闪现一下就消失"：旧 localStorage 5MB 配额写入大图静默失败导致刷新即失）；
+     localStorage 仅存元数据（模式/字体设置/自定义编码），旧数据自动迁移
    ======================================================================== */
 
 window.MineBackground = (function () {
@@ -27,58 +30,155 @@ window.MineBackground = (function () {
   ];
 
   var state = {
-    mode: "day",        // day=白天(奶油) | night=黑夜(炭黑)
-    custom: {           // 各作用域自定义背景（dataURL）
+    mode: "day",        // day=白天(奶油) | night=黑夜(纯黑)
+    custom: {           // 各作用域自定义背景（dataURL，存 IndexedDB）
       global: null,
       moments: null,
       contact: {},      // { cid: url }
       group: {}         // { gid: url }
     },
     fontStyle: "default",
-    fontColor: "black"
+    fontColor: "black",
+    customFontStyle: "",   // 自定义字体编码（font-family css）
+    customFontColor: ""    // 自定义颜色编码（#hex）
   };
 
   var el = {};              // 背景层 DOM
   var sheetEl = null;       // 管理面板
   var overlayEl = null;
+  var pendingImage = null;  // 待应用图片（上传后、选择作用域前暂存）
+
+  /* ==================== IndexedDB（图片数据） ====================
+     图片 dataURL 较大，localStorage 5MB 配额写失败会被静默吞掉，
+     导致"背景闪现一下就消失"。改用 IDB 持久化。 */
+  var DB_NAME = "mine-bg";
+  function bgDbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function () {
+        try {
+          if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+        } catch (e) {}
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbPut(key, val) {
+    return bgDbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put(val, key);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { reject(tx.error); };
+        } catch (e) { reject(e); }
+      });
+    });
+  }
+  function idbGet(key) {
+    return bgDbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx = db.transaction("kv", "readonly");
+          var rq = tx.objectStore("kv").get(key);
+          rq.onsuccess = function () { resolve(rq.result); };
+          rq.onerror = function () { reject(rq.error); };
+        } catch (e) { reject(e); }
+      });
+    });
+  }
 
   /* ==================== 持久化 ==================== */
   function save() {
+    /* 图片 → IDB（异步、幂等；失败静默——内存仍保留，刷新后有 IDB 兜底） */
+    idbPut("global", state.custom.global).catch(function () {});
+    idbPut("moments", state.custom.moments).catch(function () {});
+    idbPut("contact", state.custom.contact).catch(function () {});
+    idbPut("group", state.custom.group).catch(function () {});
+    /* 元数据 → localStorage */
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         mode: state.mode,
-        custom: state.custom,
         fontStyle: state.fontStyle,
-        fontColor: state.fontColor
+        fontColor: state.fontColor,
+        customFontStyle: state.customFontStyle,
+        customFontColor: state.customFontColor
       }));
-    } catch (e) {
-      /* 存储失败（多为 dataURL 过大），静默降级为会话级 */
-    }
+    } catch (e) {}
   }
-  function load() {
+  function load(cb) {
+    var data = null;
     try {
       var raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return;
-      var data = JSON.parse(raw);
+      if (raw) data = JSON.parse(raw);
+    } catch (e) {}
+    if (data) {
       state.mode = data.mode === "night" ? "night" : "day";
-      if (data.custom && typeof data.custom === "object") {
-        state.custom = {
-          global: data.custom.global || null,
-          moments: data.custom.moments || null,
-          contact: (data.custom.contact && typeof data.custom.contact === "object") ? data.custom.contact : {},
-          group: (data.custom.group && typeof data.custom.group === "object") ? data.custom.group : {}
-        };
-      } else {
-        /* 旧版数据迁移：customUrl → global（修复旧版自定义背景刷新即失效 bug） */
-        state.custom = {
-          global: data.customUrl || null,
-          moments: null,
-          contact: {},
-          group: {}
-        };
-      }
       state.fontStyle = (data.fontStyle && FONT_STYLES[data.fontStyle]) ? data.fontStyle : "default";
       state.fontColor = (data.fontColor && FONT_COLORS[data.fontColor]) ? data.fontColor : "black";
+      state.customFontStyle = (typeof data.customFontStyle === "string") ? data.customFontStyle : "";
+      state.customFontColor = (typeof data.customFontColor === "string") ? data.customFontColor : "";
+    }
+    /* 旧版 localStorage 内嵌图片（v11 及更早）→ 迁移到 IDB */
+    var legacy = null;
+    if (data && data.custom && typeof data.custom === "object") {
+      legacy = {
+        global: data.custom.global || null,
+        moments: data.custom.moments || null,
+        contact: (data.custom.contact && typeof data.custom.contact === "object") ? data.custom.contact : {},
+        group: (data.custom.group && typeof data.custom.group === "object") ? data.custom.group : {}
+      };
+    } else if (data && data.customUrl) {
+      legacy = { global: data.customUrl || null, moments: null, contact: {}, group: {} };
+    }
+    state.custom = { global: null, moments: null, contact: {}, group: {} };
+
+    /* 从 IDB 取回图片（异步） */
+    Promise.all([idbGet("global"), idbGet("moments"), idbGet("contact"), idbGet("group")])
+      .then(function (vals) {
+        state.custom.global = vals[0] || (legacy && legacy.global) || null;
+        state.custom.moments = vals[1] || (legacy && legacy.moments) || null;
+        state.custom.contact = (vals[2] && typeof vals[2] === "object")
+          ? vals[2]
+          : ((legacy && legacy.contact) || {});
+        state.custom.group = (vals[3] && typeof vals[3] === "object")
+          ? vals[3]
+          : ((legacy && legacy.group) || {});
+        /* 旧数据迁移入库 */
+        if (legacy) {
+          if (legacy.global) idbPut("global", legacy.global).catch(function () {});
+          if (legacy.moments) idbPut("moments", legacy.moments).catch(function () {});
+          if (legacy.contact && Object.keys(legacy.contact).length) idbPut("contact", legacy.contact).catch(function () {});
+          if (legacy.group && Object.keys(legacy.group).length) idbPut("group", legacy.group).catch(function () {});
+        }
+        /* 会话背景同步到 chat.js（其内部也走 IDB，幂等） */
+        syncChatBgs();
+        apply();
+        if (cb) cb();
+      })
+      .catch(function () {
+        /* IDB 不可用 → 用旧 localStorage 数据兜底 */
+        if (legacy) {
+          state.custom.global = legacy.global;
+          state.custom.moments = legacy.moments;
+          state.custom.contact = legacy.contact;
+          state.custom.group = legacy.group;
+        }
+        syncChatBgs();
+        apply();
+        if (cb) cb();
+      });
+  }
+  function syncChatBgs() {
+    if (!window.MineChat || !window.MineChat.setConvBg) return;
+    try {
+      Object.keys(state.custom.contact).forEach(function (cid) {
+        MineChat.setConvBg("contact:" + cid, state.custom.contact[cid]);
+      });
+      Object.keys(state.custom.group).forEach(function (gid) {
+        MineChat.setConvBg("group:" + gid, state.custom.group[gid]);
+      });
     } catch (e) {}
   }
 
@@ -116,15 +216,14 @@ window.MineBackground = (function () {
   function apply() {
     applyGlobalBg();
     applyPageBg("moments", document.getElementById("page-moments"));
-    save();
-    syncManagerUI();
     applyFontColor();
     applyFontStyle();
+    save();
+    syncManagerUI();
   }
 
   /* ==================== 白天 / 黑夜模式 ====================
-     白天 = 奶油软拟态（neumorphism），黑夜 = 炭黑冷调（fog）。
-     复用主题引擎，仅保留这两个主题作为模式。 */
+     白天 = 奶油软拟态（neumorphism），黑夜 = 纯黑（fog + theme-night）。 */
   function applyMode() {
     if (!window.MineTheme) return;
     var want = state.mode === "night" ? "fog" : "neumorphism";
@@ -160,7 +259,7 @@ window.MineBackground = (function () {
       var map = state.custom[scope];
       if (url) map[key] = url;
       else delete map[key];
-      /* 同步到聊天背景系统（chat.js 内存 + localStorage） */
+      /* 同步到聊天背景系统（chat.js，内部走 IDB） */
       if (window.MineChat && window.MineChat.setConvBg) {
         window.MineChat.setConvBg((scope === "contact" ? "contact:" : "group:") + key, url);
       }
@@ -194,23 +293,15 @@ window.MineBackground = (function () {
       }
     } catch (e) {}
     /* 同步所有会话背景到 chat.js */
-    if (window.MineChat && window.MineChat.setConvBg) {
-      try {
-        Object.keys(state.custom.contact).forEach(function (cid) {
-          MineChat.setConvBg("contact:" + cid, state.custom.contact[cid]);
-        });
-        Object.keys(state.custom.group).forEach(function (gid) {
-          MineChat.setConvBg("group:" + gid, state.custom.group[gid]);
-        });
-      } catch (e) {}
-    }
+    syncChatBgs();
     apply();
   }
 
-  /* ==================== 上传 ==================== */
+  /* ==================== 上传 ====================
+     压缩更小（800px / 0.72），控制 dataURL 体积，进一步降低存储压力 */
   function upload(file, cb) {
     if (!file || !/^image\//.test(file.type)) { if (cb) cb(null); return; }
-    window.MineUtils.compressImage(file, 1080, 0.82, function (dataURL) {
+    window.MineUtils.compressImage(file, 800, 0.72, function (dataURL) {
       if (!dataURL) { if (cb) cb(null); return; }
       if (cb) cb(dataURL);
     });
@@ -226,11 +317,19 @@ window.MineBackground = (function () {
     kai:     { name: "楷体", char: "楷",
       css: "'Kaiti SC','KaiTi','楷体',serif" },
     mono:    { name: "等宽", char: "码",
-      css: "'SF Mono','Consolas','Menlo',monospace" }
+      css: "'SF Mono','Consolas','Menlo',monospace" },
+    custom:  { name: "自定义", char: "自", css: "" }
   };
   function applyFontStyle() {
-    var root = document.documentElement;
-    var css = FONT_STYLES[state.fontStyle] ? FONT_STYLES[state.fontStyle].css : "";
+    /* 设到 body 而非 html：body 上可能有主题规则（如 theme-neumorphism 定义
+       文字变量），body inline 优先级最高，可确保全局文字样式真实生效 */
+    var root = document.body;
+    var css = "";
+    if (state.fontStyle === "custom") {
+      css = state.customFontStyle || "";
+    } else {
+      css = FONT_STYLES[state.fontStyle] ? FONT_STYLES[state.fontStyle].css : "";
+    }
     if (css) root.style.setProperty("--font-base", css);
     else root.style.removeProperty("--font-base");
   }
@@ -241,8 +340,26 @@ window.MineBackground = (function () {
     save();
     syncManagerUI();
   }
+  function setCustomFontStyle(css) {
+    var v = String(css || "").trim();
+    if (!v) { showToast("请输入字体样式编码"); return false; }
+    state.customFontStyle = v;
+    state.fontStyle = "custom";
+    applyFontStyle();
+    save();
+    syncManagerUI();
+    return true;
+  }
 
   /* ==================== 字体颜色 ==================== */
+  function hexToRgba(hex, alpha) {
+    var h = String(hex || "").trim().replace(/^#/, "");
+    if (!h) return null;
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    var n = parseInt(h, 16);
+    return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + alpha + ")";
+  }
   var FONT_COLORS = {
     white: { name: "白色",
       "--t-primary":   "#dde3e6",
@@ -268,13 +385,23 @@ window.MineBackground = (function () {
       "--t-primary":   "#dde8d8",
       "--t-secondary": "#b3c9ab",
       "--t-tertiary":  "#8ba383",
-      "--t-faint":     "#718a6a" }
+      "--t-faint":     "#718a6a" },
+    custom: { name: "自定义", isCustom: true }
   };
   function applyFontColor() {
+    /* 设到 body（inline 优先于 body 上的主题变量规则），确保字体颜色真实生效 */
+    var root = document.body;
+    if (state.fontColor === "custom" && state.customFontColor) {
+      var c = state.customFontColor;
+      root.style.setProperty("--t-primary",   hexToRgba(c, 1));
+      root.style.setProperty("--t-secondary", hexToRgba(c, 0.78));
+      root.style.setProperty("--t-tertiary",  hexToRgba(c, 0.55));
+      root.style.setProperty("--t-faint",     hexToRgba(c, 0.4));
+      return;
+    }
     var vars = FONT_COLORS[state.fontColor] || FONT_COLORS.black;
-    var root = document.documentElement;
     Object.keys(vars).forEach(function (k) {
-      if (k === "name") return;
+      if (k === "name" || k === "isCustom") return;
       root.style.setProperty(k, vars[k]);
     });
   }
@@ -284,6 +411,16 @@ window.MineBackground = (function () {
     applyFontColor();
     save();
     syncManagerUI();
+  }
+  function setCustomFontColor(hex) {
+    var v = String(hex || "").trim();
+    if (!hexToRgba(v, 1)) { showToast("颜色编码格式不对，示例：#7c3aed"); return false; }
+    state.customFontColor = v;
+    state.fontColor = "custom";
+    applyFontColor();
+    save();
+    syncManagerUI();
+    return true;
   }
 
   /* ==================== 面板（底部 Sheet） ==================== */
@@ -367,7 +504,7 @@ window.MineBackground = (function () {
     /* 3. 已设置列表 */
     var setHtml = buildSetListHtml();
 
-    /* 4. 字体样式 / 颜色 */
+    /* 4. 字体样式 / 颜色（含自定义输入） */
     var fontStyleHtml =
       '<div class="section-label">字体样式</div>' +
       '<div class="font-color-row">' +
@@ -378,6 +515,12 @@ window.MineBackground = (function () {
             '<span class="fc-swatch font-style-swatch" style="font-family:' + (fs.css || "sans-serif") + ';">' + fs.char + '</span>' +
             '<span>' + fs.name + '</span></button>';
         }).join("") +
+      '</div>' +
+      '<div class="font-custom-row">' +
+        '<input class="font-custom-input" id="font-style-input" ' +
+          'placeholder="输入字体样式编码，如 \'PingFang SC\',sans-serif" value="' +
+          (state.fontStyle === "custom" ? state.customFontStyle : "") + '">' +
+        '<button class="font-custom-apply" id="font-style-apply">应用</button>' +
       '</div>';
 
     var fontColorHtml =
@@ -388,8 +531,15 @@ window.MineBackground = (function () {
           if (key === "name") return "";
           return '<button class="font-color-btn' + (state.fontColor === key ? " is-active" : "") +
             '" data-font-color="' + key + '">' +
-            '<span class="fc-swatch fc-' + key + '"></span><span>' + fc.name + '</span></button>';
+            '<span class="fc-swatch' + (fc.isCustom ? " fc-custom" : " fc-" + key) + '"></span>' +
+            '<span>' + fc.name + '</span></button>';
         }).join("") +
+      '</div>' +
+      '<div class="font-custom-row">' +
+        '<input class="font-custom-input" id="font-color-input" ' +
+          'placeholder="输入颜色编码，如 #7c3aed" value="' +
+          (state.fontColor === "custom" ? state.customFontColor : "") + '">' +
+        '<button class="font-custom-apply" id="font-color-apply">应用</button>' +
       '</div>';
 
     body.innerHTML = modeHtml + uploadHtml + scopeHtml + setHtml + fontStyleHtml + fontColorHtml;
@@ -482,17 +632,30 @@ window.MineBackground = (function () {
       });
     });
 
-    /* 字体样式 / 颜色 */
+    /* 字体样式 / 颜色预设 */
     body.querySelectorAll("[data-font-style]").forEach(function (btn) {
       btn.addEventListener("click", function () { setFontStyle(btn.getAttribute("data-font-style")); });
     });
     body.querySelectorAll("[data-font-color]").forEach(function (btn) {
       btn.addEventListener("click", function () { setFontColor(btn.getAttribute("data-font-color")); });
     });
-  }
 
-  /* 待应用图片（上传后、选择作用域前暂存） */
-  var pendingImage = null;
+    /* 自定义字体样式 / 字体颜色 */
+    var fsInput = body.querySelector("#font-style-input");
+    var fsApply = body.querySelector("#font-style-apply");
+    if (fsInput && fsApply) {
+      fsApply.addEventListener("click", function () {
+        if (setCustomFontStyle(fsInput.value)) renderManager();
+      });
+    }
+    var fcInput = body.querySelector("#font-color-input");
+    var fcApply = body.querySelector("#font-color-apply");
+    if (fcInput && fcApply) {
+      fcApply.addEventListener("click", function () {
+        if (setCustomFontColor(fcInput.value)) renderManager();
+      });
+    }
+  }
 
   /* 作用域选择浮层（上传图片后出现） */
   function showScopePicker() {
@@ -651,9 +814,6 @@ window.MineBackground = (function () {
     el.image = document.querySelector(".bg-image");
     load();
     applyMode();
-    apply();
-    applyFontColor();
-    applyFontStyle();
   }
 
   return {
@@ -670,6 +830,8 @@ window.MineBackground = (function () {
     applyPageBg: applyPageBg,
     setFontStyle: setFontStyle,
     setFontColor: setFontColor,
+    setCustomFontStyle: setCustomFontStyle,
+    setCustomFontColor: setCustomFontColor,
     applyFontColor: applyFontColor,
     applyFontStyle: applyFontStyle,
     getState: function () { return JSON.parse(JSON.stringify(state)); }
