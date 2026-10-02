@@ -47,10 +47,25 @@ window.MineNetease = (function () {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+  /* 独立 toast：不依赖 MineRadio/MineUtils（此前两处 API 不存在导致
+     所有提示静默失效，点击"没反应"的根因）——内联样式保证任何主题可见 */
+  var toastTimer = null;
   function toast(msg) {
     try {
-      if (window.MineRadio && MineRadio.showToast) { MineRadio.showToast(msg); return; }
-      if (window.MineUtils && MineUtils.showToast) { MineUtils.showToast(msg); return; }
+      var el = document.querySelector(".netease-toast");
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "netease-toast";
+        el.style.cssText = "position:fixed;left:50%;bottom:100px;transform:translateX(-50%);" +
+          "z-index:99999;padding:10px 16px;border-radius:999px;background:rgba(17,17,17,0.92);" +
+          "color:#fff;font-size:13px;line-height:1.5;max-width:82%;" +
+          "box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:opacity .25s;pointer-events:none;opacity:0;";
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.style.opacity = "1";
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { el.style.opacity = "0"; }, 2600);
     } catch (e) {}
   }
   function apiUrl() {

@@ -63,7 +63,7 @@ var CORE_ASSETS = [
   "mail.js?v10",
   "treehole.js?v6",
   "radio.js?v4",
-  "netease.js?v2",
+  "netease.js?v3",
   "foodie.js?v3",
   "moments.js?v4",
   "contact-moments.js?v1",
