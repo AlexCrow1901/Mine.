@@ -386,6 +386,16 @@ input[type="range"].slider::-moz-range-thumb {
 }
 .fc-swatch.fc-white { background: #fffff0; }
 .fc-swatch.fc-black { background: #1a1a1a; }
+.fc-swatch.fc-cream { background: #efe9dc; }
+.fc-swatch.fc-azure { background: #cfe0ec; }
+.fc-swatch.fc-sage  { background: #cfe0c9; }
+/* 字体样式预览（色点内显示该字体的"字"） */
+.fc-swatch.font-style-swatch {
+  font-size: 12px;
+  line-height: 1;
+  background: var(--glass-1);
+  color: var(--t-primary);
+}
 .fc-swatch.fc-inherit {
   background: linear-gradient(135deg, #fffff0 0 50%, #1a1a1a 50% 100%);
 }
