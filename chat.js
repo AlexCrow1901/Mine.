@@ -540,6 +540,13 @@ window.MineChat = (function () {
     if (!window.MineCards || !window.MineCards.getReplyPool) return [];
     return window.MineCards.getReplyPool(contactId || null);
   }
+  /** 读取可自定义的系统概率（0~1），无配置时回退默认值 */
+  function prob(key) {
+    var v = null;
+    if (window.MineProbs && window.MineProbs.get) v = window.MineProbs.get(key);
+    if (typeof v !== "number" || isNaN(v)) v = 0;
+    return v / 100;
+  }
   /** 判断字卡是否为图片字卡（base64 data URI） */
   function isImageCard(card) {
     return typeof card === "string" && card.indexOf("data:image/") === 0;
@@ -597,13 +604,13 @@ window.MineChat = (function () {
     var emojiCards = filterEmojiCards(pool);
     var audioCards = filterAudioCards(pool);
     var textCards = filterTextCards(pool);
-    if (imageCards.length > 0 && Math.random() < 0.05) {
+    if (imageCards.length > 0 && Math.random() < prob("imageCard")) {
       return imageCards[Math.floor(Math.random() * imageCards.length)];
     }
-    if (emojiCards.length > 0 && Math.random() < 0.10) {
+    if (emojiCards.length > 0 && Math.random() < prob("emojiCard")) {
       return emojiCards[Math.floor(Math.random() * emojiCards.length)];
     }
-    if (audioCards.length > 0 && Math.random() < 0.03) {
+    if (audioCards.length > 0 && Math.random() < prob("audioCard")) {
       return audioCards[Math.floor(Math.random() * audioCards.length)];
     }
     if (textCards.length > 0) {
@@ -659,7 +666,7 @@ window.MineChat = (function () {
   function pickEmojiAttachments(pool) {
     var emojiCards = filterEmojiCards(pool);
     if (emojiCards.length === 0) return [];
-    if (Math.random() >= 0.15) return [];
+    if (Math.random() >= prob("emojiAttach")) return [];
     var r = Math.random();
     var count = r < 0.73 ? 1 : (r < 0.93 ? 2 : 3);
     var result = [];
@@ -1143,8 +1150,8 @@ window.MineChat = (function () {
     if (curType === "contact") {
       // 一对一
       var contact = C.findContact(curId);
-      // 1% 概率触发自动回复
-      if (Math.random() < 0.01) {
+      // 自动回复沉默概率（可自定义）
+      if (Math.random() < prob("silentChance")) {
         scheduleAutoReply(contact, null, curConvKey);
         return;
       }
@@ -1174,8 +1181,8 @@ window.MineChat = (function () {
       if (allResponders.length === 0) return;
       var numReply;
       if (allResponders.length <= 2) {
-        // ≤2人：60% → 1人, 40% → 2人
-        numReply = Math.random() < 0.60 ? 1 : 2;
+        // ≤2人：第二条回复概率可自定义（默认 40%）
+        numReply = Math.random() < (1 - prob("groupSecond")) ? 1 : 2;
       } else {
         // ≥3人：50% → 1人, 30% → 2人, 15% → 3人, 5% → 全部
         var r = Math.random();
@@ -1188,8 +1195,8 @@ window.MineChat = (function () {
       if (responders.length === 0) return;
       var firstReply = true;
       responders.forEach(function (member) {
-        // 1% 概率触发自动回复
-        if (Math.random() < 0.01) {
+        // 自动回复沉默概率（可自定义）
+        if (Math.random() < prob("silentChance")) {
           scheduleAutoReply(member, group, curConvKey);
           return;
         }

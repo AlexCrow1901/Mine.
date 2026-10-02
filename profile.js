@@ -133,6 +133,19 @@ window.MineProfile = (function () {
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
+    html += '<div class="list-sep"></div>';
+
+    // 概率修改
+    html += '<div class="group-head">概率</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-probability">' +
+      '<div class="func-icon">' + I.svg("sliders", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">概率修改</span>' +
+        '<span class="func-sub">自定义图片 / emoji / 语音 / 附带 emoji / 沉默等概率</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+
     html += '</div>'; // .scroll
 
     // 渲染到 detail 页
@@ -163,6 +176,14 @@ window.MineProfile = (function () {
     if (cardsBtn) {
       cardsBtn.addEventListener("click", function () {
         if (window.MineCards) window.MineCards.openManager();
+      });
+    }
+
+    // 概率修改入口 → 打开概率管理器
+    var probBtn = pageEl.querySelector('[data-act="open-probability"]');
+    if (probBtn) {
+      probBtn.addEventListener("click", function () {
+        if (window.MineProbs) window.MineProbs.openManager();
       });
     }
 
