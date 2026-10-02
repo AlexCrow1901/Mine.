@@ -113,10 +113,10 @@ window.MineNetease = (function () {
 
     /* 未填 API → 提示部署 */
     if (!base) {
-      html += '<div class="radio-netease-hint">先部署自己的网易云 API（免费，约 10 分钟）：<br>' +
-        '① GitHub 打开 <b>Binaryify/NeteaseCloudMusicApi</b> → Fork<br>' +
-        '② 打开 <b>vercel.com</b>（GitHub 登录）→ Add New Project → 选刚 Fork 的项目 → Deploy<br>' +
-        '③ 部署完成复制 https://xxx.vercel.app 填到上方并保存即可扫码登录。' +
+      html += '<div class="radio-netease-hint">先部署自己的网易云 API（免费、国内可访问）：<br>' +
+        '① 打开 <b>dash.cloudflare.com</b>（邮箱注册）→ Workers & Pages → 创建 Worker<br>' +
+        '② 把 <b>mine-netease-worker.js</b> 全部内容粘贴进代码编辑器 → 保存并部署<br>' +
+        '③ 复制 https://xxx.workers.dev 地址填到上方并保存，即可扫码登录。' +
         '</div>';
       container.innerHTML = html;
       bind(container);
