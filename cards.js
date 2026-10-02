@@ -26,6 +26,9 @@ window.MineCards = (function () {
   function isImageCard(card) {
     return typeof card === "string" && card.indexOf("data:image/") === 0;
   }
+  function isAudioCard(card) {
+    return typeof card === "string" && card.indexOf("data:audio/") === 0;
+  }
   function isEmojiCard(card) {
     if (typeof card !== "string" || card.length === 0) return false;
     if (isImageCard(card)) return false;
@@ -213,20 +216,28 @@ window.MineCards = (function () {
       '<button class="card-back" data-pick-back>' + I.svg("back", 14) + ' 切换</button>' +
       '</div>';
     var per = state.per[currentCid] || [];
-    html += renderCardEditor(per, "per", currentCid);
+    html += renderCardEditor(per, "per", currentCid, true);
     return html;
   }
 
-  /* ---- 类型分栏编辑器：每一栏一种字卡类型，点击栏头折叠/展开 ---- */
-  function renderCardEditor(list, scope, cid) {
+  /* ---- 类型分栏编辑器：每一栏一种字卡类型，点击栏头折叠/展开
+       includeAudio=true 时额外显示语音栏（单独字卡） ---- */
+  function renderCardEditor(list, scope, cid, includeAudio) {
     var groups = [
       { type: "text",  name: "字符", icon: "feather", items: [] },
       { type: "emoji", name: "emoji", icon: "smile", items: [] },
       { type: "image", name: "图片", icon: "image", items: [] }
     ];
+    if (includeAudio) {
+      groups.push({ type: "audio", name: "语音", icon: "mic", items: [] });
+    }
     (list || []).forEach(function (card, i) {
       var entry = { card: card, idx: i };
       if (isImageCard(card)) groups[2].items.push(entry);
+      else if (isAudioCard(card)) {
+        if (includeAudio) groups[3].items.push(entry);
+        else groups[2].items.push(entry);  /* 公用字卡无语音栏时语音并入图片栏 */
+      }
       else if (isEmojiCard(card)) groups[1].items.push(entry);
       else groups[0].items.push(entry);
     });
@@ -255,7 +266,8 @@ window.MineCards = (function () {
     if (!items || items.length === 0) {
       var emptyText =
         type === "text" ? "暂无字符字卡" :
-        (type === "emoji" ? "暂无 emoji 字卡" : "暂无图片字卡");
+        (type === "emoji" ? "暂无 emoji 字卡" :
+        (type === "image" ? "暂无图片字卡" : "暂无语音字卡"));
       return '<div class="cards-empty">' + emptyText + '</div>';
     }
     return '<div class="card-list">' + items.map(function (entry) {
@@ -263,12 +275,15 @@ window.MineCards = (function () {
       var inner;
       if (isImageCard(card)) {
         inner = '<img class="card-img" src="' + escapeHtml(card) + '" alt="图片字卡">';
+      } else if (isAudioCard(card)) {
+        inner = '<span class="card-voice">' + I.svg("mic", 16) + '</span>' +
+          '<audio controls preload="none" src="' + escapeHtml(card) + '"></audio>';
       } else if (isEmojiCard(card)) {
         inner = '<span class="card-emoji">' + escapeHtml(card) + '</span>';
       } else {
         inner = '<span class="card-text">' + escapeHtml(card) + '</span>';
       }
-      return '<div class="card-item">' + inner +
+      return '<div class="card-item' + (isAudioCard(card) ? " is-voice" : "") + '">' + inner +
         '<button class="card-del" data-del-scope="' + scope + '" data-del-cid="' + (cid || "") + '" data-del-idx="' + entry.idx + '" ' +
         'aria-label="删除">' + I.svg("trash", 16) + '</button></div>';
     }).join("") + '</div>';
@@ -289,6 +304,11 @@ window.MineCards = (function () {
         '<input type="text" class="card-input" id="card-input-emoji" ' +
           'placeholder="输入 emoji，如 😊🌸" maxlength="12">' +
         '<button class="card-add-btn" ' + data + ' data-add-type="emoji" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
+        '</div>';
+    }
+    if (type === "audio") {
+      return '<div class="card-add-row">' +
+        '<button class="card-image-add-btn" ' + data + ' data-add-type="audio">' + I.svg("mic", 18) + ' 选择语音文件</button>' +
         '</div>';
     }
     return '<div class="card-add-row">' +
@@ -363,29 +383,45 @@ window.MineCards = (function () {
       });
     });
 
-    /* 添加图片字卡 */
-    body.querySelectorAll("[data-add-type='image']").forEach(function (btn) {
+    /* 添加图片 / 语音字卡 */
+    body.querySelectorAll("[data-add-type='image'], [data-add-type='audio']").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var fileEl = body.querySelector("#card-img-file");
+        var addType = btn.getAttribute("data-add-type");
+        var scope = btn.getAttribute("data-add-scope");
+        var cid = btn.getAttribute("data-add-cid") || null;
+        var fid = addType === "audio" ? "card-audio-file" : "card-img-file";
+        var fileEl = body.querySelector("#" + fid);
         if (!fileEl) {
           fileEl = document.createElement("input");
           fileEl.type = "file";
-          fileEl.accept = "image/*";
-          fileEl.id = "card-img-file";
+          fileEl.accept = addType === "audio" ? "audio/*" : "image/*";
+          fileEl.id = fid;
           fileEl.className = "file-hidden";
           document.body.appendChild(fileEl);
           fileEl.addEventListener("change", function () {
             if (this.files && this.files[0]) {
-              var scope = btn.getAttribute("data-add-scope");
-              var cid = btn.getAttribute("data-add-cid") || null;
               var f = this.files[0];
-              if (U && U.compressImage) {
-                U.compressImage(f, 600, 0.78, function (dataURL) {
+              if (addType === "audio") {
+                /* 语音：读为 audio dataURL 原样存储（不做压缩） */
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                  var dataURL = ev.target.result;
                   if (!dataURL) return;
                   if (scope === "public") addPublicCard(dataURL);
                   else if (scope === "per" && cid) addPerCard(cid, dataURL);
                   render();
-                });
+                };
+                reader.onerror = function () { showToast("语音文件读取失败"); };
+                reader.readAsDataURL(f);
+              } else {
+                if (U && U.compressImage) {
+                  U.compressImage(f, 600, 0.78, function (dataURL) {
+                    if (!dataURL) return;
+                    if (scope === "public") addPublicCard(dataURL);
+                    else if (scope === "per" && cid) addPerCard(cid, dataURL);
+                    render();
+                  });
+                }
               }
             }
             this.value = "";
@@ -441,6 +477,7 @@ window.MineCards = (function () {
     addPerCard: addPerCard,
     removePerCard: removePerCard,
     isImageCard: isImageCard,
+    isAudioCard: isAudioCard,
     isEmojiCard: isEmojiCard,
     getState: function () { return JSON.parse(JSON.stringify(state)); }
   };

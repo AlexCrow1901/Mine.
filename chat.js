@@ -544,6 +544,10 @@ window.MineChat = (function () {
   function isImageCard(card) {
     return typeof card === "string" && card.indexOf("data:image/") === 0;
   }
+  /** 判断字卡是否为语音字卡（audio data URI） */
+  function isAudioCard(card) {
+    return typeof card === "string" && card.indexOf("data:audio/") === 0;
+  }
   /** 判断字卡是否为 emoji 字卡（由 emoji 字符组成的短串） */
   function isEmojiCard(card) {
     if (typeof card !== "string" || card.length === 0) return false;
@@ -569,15 +573,21 @@ window.MineChat = (function () {
     if (!cards || cards.length === 0) return [];
     return cards.filter(isEmojiCard);
   }
-  /** 从卡池中筛选文字字卡（排除图片和 emoji） */
+  /** 从卡池中筛选语音字卡 */
+  function filterAudioCards(cards) {
+    if (!cards || cards.length === 0) return [];
+    return cards.filter(isAudioCard);
+  }
+  /** 从卡池中筛选文字字卡（排除图片、语音和 emoji） */
   function filterTextCards(cards) {
     if (!cards || cards.length === 0) return [];
-    return cards.filter(function (c) { return !isImageCard(c) && !isEmojiCard(c); });
+    return cards.filter(function (c) { return !isImageCard(c) && !isAudioCard(c) && !isEmojiCard(c); });
   }
   /**
-   * 通用字卡选择器：10% 概率发送图片字卡，10% 概率发送 emoji 字卡
-   * · 若池中有图片字卡且命中 10% → 从图片字卡中随机抽取
+   * 通用字卡选择器：5% 概率发送图片字卡，10% 概率发送 emoji 字卡，3% 概率发送语音字卡
+   * · 若池中有图片字卡且命中 5% → 从图片字卡中随机抽取
    * · 若池中有 emoji 字卡且命中 10% → 从 emoji 字卡中随机抽取
+   * · 若池中有语音字卡且命中 3% → 从语音字卡中随机抽取
    * · 否则从文字字卡中随机抽取
    * · 若无文字字卡则从全池随机抽取
    */
@@ -585,12 +595,16 @@ window.MineChat = (function () {
     if (!pool || pool.length === 0) return null;
     var imageCards = filterImageCards(pool);
     var emojiCards = filterEmojiCards(pool);
+    var audioCards = filterAudioCards(pool);
     var textCards = filterTextCards(pool);
-    if (imageCards.length > 0 && Math.random() < 0.10) {
+    if (imageCards.length > 0 && Math.random() < 0.05) {
       return imageCards[Math.floor(Math.random() * imageCards.length)];
     }
     if (emojiCards.length > 0 && Math.random() < 0.10) {
       return emojiCards[Math.floor(Math.random() * emojiCards.length)];
+    }
+    if (audioCards.length > 0 && Math.random() < 0.03) {
+      return audioCards[Math.floor(Math.random() * audioCards.length)];
     }
     if (textCards.length > 0) {
       return textCards[Math.floor(Math.random() * textCards.length)];
@@ -883,14 +897,20 @@ window.MineChat = (function () {
     // 图片消息检测
     var isImageMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:image/") === 0;
     if (isImageMsg) bubbleClass += " is-image-msg";
+    // 语音消息检测
+    var isAudioMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:audio/") === 0;
+    if (isAudioMsg) bubbleClass += " is-audio-msg";
     // emoji 消息检测
     var isEmojiMsg = !msg.isChoice && typeof msg.text === "string" && isEmojiCard(msg.text);
     if (isEmojiMsg) bubbleClass += " is-emoji-msg";
     var rowClass = isMe ? "msg-row is-me" : "msg-row";
-    // 抉择消息使用特殊渲染（ABCD 逐行对齐）；图片消息渲染为图片气泡；emoji 消息与文字同等大小
+    // 抉择消息使用特殊渲染（ABCD 逐行对齐）；图片消息渲染为图片气泡；语音消息渲染为语音播放条；emoji 消息与文字同等大小
     var bubbleText;
     if (isImageMsg) {
       bubbleText = '<img class="msg-image" src="' + escapeHtml(msg.text) + '" alt="图片">';
+    } else if (isAudioMsg) {
+      bubbleText = '<span class="msg-voice">' + I.svg("mic", 16) + '</span>' +
+        '<audio controls preload="none" src="' + escapeHtml(msg.text) + '"></audio>';
     } else if (isEmojiMsg) {
       bubbleText = '<span class="msg-emoji">' + escapeHtml(msg.text) + '</span>';
     } else if (msg.isChoice) {
@@ -1192,8 +1212,8 @@ window.MineChat = (function () {
               senderName: m.name || "未知",
               senderAvatar: m.avatar || null
             });
-            // 文字字卡有 15% 概率附加 1~3 条 emoji
-            if (!isImageCard(card) && !isEmojiCard(card)) {
+            // 文字字卡有 15% 概率附加 1~3 条 emoji（图片/语音字卡不附加）
+            if (!isImageCard(card) && !isAudioCard(card) && !isEmojiCard(card)) {
               var _pool = [];
               if (m && m.cards) _pool = _pool.concat(m.cards);
               if (group && group.cards) _pool = _pool.concat(group.cards);
@@ -1297,8 +1317,8 @@ window.MineChat = (function () {
       senderName: senderName,
       senderAvatar: senderAvatar
     });
-    // 文字字卡有 15% 概率附加 1~3 条 emoji
-    if (!isImageCard(card) && !isEmojiCard(card)) {
+    // 文字字卡有 15% 概率附加 1~3 条 emoji（图片/语音字卡不附加）
+    if (!isImageCard(card) && !isAudioCard(card) && !isEmojiCard(card)) {
       var emojis = pickEmojiAttachments(contact.cards || []);
       for (var i = 0; i < emojis.length; i++) {
         msgs.push({
@@ -1338,8 +1358,8 @@ window.MineChat = (function () {
     var beforeLen = msgs.length;
     if (card) {
       msgs.push({ id: uid(), from: contact.id, text: card, time: Date.now(), senderName: senderName, senderAvatar: senderAvatar });
-      // 文字字卡有 15% 概率附加 1~3 条 emoji
-      if (!isImageCard(card) && !isEmojiCard(card)) {
+      // 文字字卡有 15% 概率附加 1~3 条 emoji（图片/语音字卡不附加）
+      if (!isImageCard(card) && !isAudioCard(card) && !isEmojiCard(card)) {
         var emojis = pickEmojiAttachments(contact.cards || []);
         for (var i = 0; i < emojis.length; i++) {
           msgs.push({ id: uid(), from: contact.id, text: emojis[i], time: Date.now(), senderName: senderName, senderAvatar: senderAvatar });
