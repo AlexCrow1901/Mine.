@@ -87,13 +87,29 @@ window.MineProfile = (function () {
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
-    // 个性化：背景
+    // 个性化：背景 / 聊天气泡 / 系统主题（三者并列；气泡与主题后期支持增删导入）
     html += '<div class="group-head">个性化</div>';
     html += '<div class="func-row" role="button" tabindex="0" data-act="open-background">' +
       '<div class="func-icon">' + I.svg("background", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">背景</span>' +
         '<span class="func-sub">模式、背景、字体样式与字体颜色</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-bubble">' +
+      '<div class="func-icon">' + I.svg("chat", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">聊天气泡</span>' +
+        '<span class="func-sub">自定义聊天气泡样式（即将上线）</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-theme">' +
+      '<div class="func-icon">' + I.svg("droplet", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">系统主题</span>' +
+        '<span class="func-sub">自定义系统主题（即将上线）</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
@@ -166,6 +182,20 @@ window.MineProfile = (function () {
     if (bgBtn) {
       bgBtn.addEventListener("click", function () {
         if (window.MineBackground) window.MineBackground.openManager();
+      });
+    }
+
+    // 聊天气泡 / 系统主题入口（本期占位，后期支持增删导入）
+    var bubbleBtn = pageEl.querySelector('[data-act="open-bubble"]');
+    if (bubbleBtn) {
+      bubbleBtn.addEventListener("click", function () {
+        showToast("聊天气泡即将上线，敬请期待");
+      });
+    }
+    var themeBtn = pageEl.querySelector('[data-act="open-theme"]');
+    if (themeBtn) {
+      themeBtn.addEventListener("click", function () {
+        showToast("系统主题即将上线，敬请期待");
       });
     }
 

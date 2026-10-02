@@ -1,5 +1,5 @@
 /* ========================================================================
-   Mine · 背景管理器（v13）
+   Mine · 背景管理器（v14）
    ------------------------------------------------------------------------
    功能（微信式视觉管理，入口在"个人中心 → 背景"）：
    · 白天 | 黑夜：白天 = 奶油软拟态，黑夜 = 纯黑
@@ -446,13 +446,18 @@ window.MineBackground = (function () {
     renderManager();
   }
 
-  /* 联系人 / 群列表（供作用域选择） */
+  /* 联系人 / 群列表（供作用域选择）
+     通讯录是懒加载：未打开过通讯录页时数据为空 → 先强制 loadData()，
+     保证"选择指定联系人"始终可用 */
   function listTargets(kind) {
     try {
-      if (window.MineContacts && MineContacts.getState) {
-        var st = MineContacts.getState();
-        if (kind === "contact") return st.contacts || [];
-        if (kind === "group") return st.groups || [];
+      if (window.MineContacts) {
+        if (MineContacts.loadData) MineContacts.loadData();
+        if (MineContacts.getState) {
+          var st = MineContacts.getState();
+          if (kind === "contact") return st.contacts || [];
+          if (kind === "group") return st.groups || [];
+        }
       }
     } catch (e) {}
     return [];
@@ -731,7 +736,7 @@ window.MineBackground = (function () {
       ? targets.map(function (t) {
           return '<button class="target-row" data-target="' + (t.id || "") + '">' +
             '<span class="target-avatar">' + (window.MineContacts && MineContacts.avatarHTML
-              ? MineContacts.avatarHTML(28, "target-avatar-img") : "") + '</span>' +
+              ? MineContacts.avatarHTML(t, 28, "target-avatar-img") : "") + '</span>' +
             '<span class="target-name">' + (t.name || t.nickname || t.id) + '</span></button>';
         }).join("")
       : '<div class="cm-empty">暂无可选' + (kind === "contact" ? "联系人" : "群聊") + '，请先到通讯录添加</div>';

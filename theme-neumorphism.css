@@ -1647,11 +1647,6 @@ body.theme-neumorphism .choice-submit-btn:active {
    其他通用适配
    ======================================================================== */
 
-/* 所有页面背景统一为奶油色 */
-body.theme-neumorphism .page {
-  background: var(--c-charcoal);
-}
-
 /* 通知角标奶油风：仅数字文本，无背景/无边框 */
 body.theme-neumorphism .notify-badge {
   background: transparent !important;
