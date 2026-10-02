@@ -256,7 +256,7 @@ body.theme-neumorphism .neu-hero {
   align-items: center;
   gap: var(--sp-4);
   padding: var(--sp-4);
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-2);
   background: var(--c-graphite);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-neu-out);
@@ -395,7 +395,7 @@ body.theme-neumorphism .neu-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-2);
 }
 
 /* ====== 欢迎语 ====== */
@@ -405,7 +405,7 @@ body.theme-neumorphism .neu-welcome {
   letter-spacing: 2px;
   color: var(--t-tertiary);
   text-align: center;
-  margin: var(--sp-2) 0 var(--sp-4);
+  margin: var(--sp-1) 0 var(--sp-2);
   text-transform: uppercase;
 }
 
@@ -1519,8 +1519,8 @@ body.theme-neumorphism .foodie-desc { color: var(--t-tertiary); }
 body.theme-neumorphism .app-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--sp-5) var(--sp-2);
-  padding: var(--sp-3) var(--sp-3) var(--sp-5);
+  gap: var(--sp-3) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
 /* 应用单元格 */
@@ -1529,7 +1529,7 @@ body.theme-neumorphism .app-cell {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  min-height: 80px;
+  min-height: 74px;
 }
 
 /* 应用图标 */
