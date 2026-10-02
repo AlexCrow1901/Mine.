@@ -612,6 +612,216 @@ input[type="range"].slider::-moz-range-thumb {
 }
 .font-custom-apply:active { background: var(--glass-press); transform: scale(0.97); }
 
+/* ---------- 字卡管理面板 ---------- */
+.card-tabs {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.card-tab {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  color: var(--t-primary);
+  font-size: 14px;
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.card-tab:active { background: var(--glass-press); transform: scale(0.97); }
+.card-tab.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent-soft), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.card-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  min-height: 44px;
+}
+.card-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--t-primary);
+  word-break: break-all;
+}
+.card-emoji {
+  flex: 1;
+  font-size: 26px;
+  line-height: 1.2;
+}
+.card-img {
+  flex: 1;
+  max-width: 120px;
+  max-height: 72px;
+  border-radius: var(--r-xs);
+  object-fit: cover;
+}
+.card-del {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--t-tertiary);
+}
+.card-del:active { background: var(--glass-press); }
+.card-add-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+.card-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--t-primary);
+  font-size: 13px;
+  outline: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.card-input:focus { border-color: var(--accent); }
+.card-input::placeholder { color: var(--t-faint); }
+.card-add-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.card-add-btn:active { background: var(--glass-press); transform: scale(0.97); }
+.card-target-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.card-current-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  font-size: 13px;
+  color: var(--t-primary);
+}
+.card-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--accent);
+  font-size: 12px;
+}
+.card-back:active { background: var(--glass-press); }
+.card-hint {
+  margin-bottom: var(--sp-3);
+  font-size: 12px;
+  color: var(--t-tertiary);
+}
+
+/* ---------- 字卡类型分栏（点击折叠/展开） ---------- */
+.card-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.card-type-section {
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+.card-type-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-3);
+  border: none;
+  background: transparent;
+  color: var(--t-primary);
+  font-size: 14px;
+  text-align: left;
+}
+.card-type-head:active { background: var(--glass-press); }
+.card-type-icon { display: flex; color: var(--accent); }
+.card-type-name { flex: 1; font-weight: 500; }
+.card-type-count {
+  font-size: 12px;
+  color: var(--t-tertiary);
+  background: var(--bd-soft);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+.card-type-arrow {
+  display: flex;
+  transition: transform var(--dur-fast) var(--ease-soft);
+  color: var(--t-tertiary);
+}
+.card-type-arrow.is-open { transform: rotate(-90deg); }
+.card-type-body {
+  padding: 0 var(--sp-3) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cards-empty {
+  padding: var(--sp-4) var(--sp-3);
+  text-align: center;
+  font-size: 13px;
+  color: var(--t-tertiary);
+}
+.card-image-add-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--accent);
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.card-image-add-btn:active { background: var(--glass-press); transform: scale(0.97); }
+
 /* ---------- 开关 ---------- */
 .toggle {
   position: relative;

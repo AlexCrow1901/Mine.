@@ -1,4 +1,4 @@
-  /* ========================================================================
+/* ========================================================================
    Mine · 聊天模块
    ------------------------------------------------------------------------
    功能：
@@ -535,6 +535,11 @@ window.MineChat = (function () {
       escapeHtml(C ? C.firstChar(meProfile ? meProfile.name : "我") : "我") + '</div>';
   }
   /* ---------------- 字卡选择工具 ---------------- */
+  /** 我的字卡池（个人中心"字卡"模块配置）：单独字卡(该联系人) + 公用字卡 */
+  function mineCardPool(contactId) {
+    if (!window.MineCards || !window.MineCards.getReplyPool) return [];
+    return window.MineCards.getReplyPool(contactId || null);
+  }
   /** 判断字卡是否为图片字卡（base64 data URI） */
   function isImageCard(card) {
     return typeof card === "string" && card.indexOf("data:image/") === 0;
@@ -592,10 +597,14 @@ window.MineChat = (function () {
     }
     return pool[Math.floor(Math.random() * pool.length)];
   }
-  /** 从联系人的字卡中随机抽取一条（10% 概率图片字卡，10% 概率 emoji 字卡） */
+  /** 从联系人的字卡中随机抽取一条（10% 概率图片字卡，10% 概率 emoji 字卡）
+      字卡池 = 我的单独字卡(该联系人) + 我的公用字卡 + 联系人自带字卡 */
   function pickRandomCard(contact) {
-    if (!contact || !contact.cards || contact.cards.length === 0) return null;
-    return pickCardWithImageChance(contact.cards);
+    if (!contact) return null;
+    var pool = mineCardPool(contact.id);
+    if (contact.cards && contact.cards.length) pool = pool.concat(contact.cards);
+    if (pool.length === 0) return null;
+    return pickCardWithImageChance(pool);
   }
   /**
    * 群聊中合并个人字卡 + 群字卡后随机抽取（10% 概率图片字卡，10% 概率 emoji 字卡）
@@ -603,19 +612,24 @@ window.MineChat = (function () {
    * @param group    当前群聊对象
    */
   function pickRandomCardForGroup(contact, group) {
-    var pool = [];
+    var pool = mineCardPool(contact ? contact.id : null);
     if (contact && contact.cards) pool = pool.concat(contact.cards);
     if (group && group.cards) pool = pool.concat(group.cards);
     return pickCardWithImageChance(pool);
   }
-  /** 从联系人的自动回复字卡中随机抽取一条（10% 概率图片字卡，10% 概率 emoji 字卡） */
+  /** 从联系人的自动回复字卡中随机抽取一条
+      （我的单独字卡 + 我的公用字卡 + 联系人自带 autoCards） */
   function pickRandomAutoCard(contact) {
-    if (!contact || !contact.autoCards || contact.autoCards.length === 0) return null;
-    return pickCardWithImageChance(contact.autoCards);
+    if (!contact) return null;
+    var pool = mineCardPool(contact.id);
+    if (contact.autoCards && contact.autoCards.length) pool = pool.concat(contact.autoCards);
+    if (pool.length === 0) return null;
+    return pickCardWithImageChance(pool);
   }
-  /** 群聊中合并个人自动回复字卡 + 群自动回复字卡后随机抽取（10% 概率图片字卡，10% 概率 emoji 字卡） */
+  /** 群聊中合并个人自动回复字卡 + 群自动回复字卡后随机抽取
+      （我的单独字卡 + 我的公用字卡 + 个人 autoCards + 群 autoCards） */
   function pickRandomAutoCardForGroup(contact, group) {
-    var pool = [];
+    var pool = mineCardPool(contact ? contact.id : null);
     if (contact && contact.autoCards) pool = pool.concat(contact.autoCards);
     if (group && group.autoCards) pool = pool.concat(group.autoCards);
     return pickCardWithImageChance(pool);
@@ -642,14 +656,16 @@ window.MineChat = (function () {
   }
   /**
    * 从群成员中随机选取 n 位可回复的成员
-   * 可回复 = 有个人字卡 或 群有群字卡
+   * 可回复 = 有个人字卡 / 有我的单独字卡 / 我的公用字卡 / 群有群字卡
    */
   function pickRandomMembers(group, n) {
     var groupHasCards = group && group.cards && group.cards.length > 0;
     var members = (group.members || []).map(C.findContact).filter(function (c) {
       if (!c) return false;
+      // 我的单独字卡 + 我的公用字卡（所有联系人可用）
+      var hasMine = mineCardPool(c.id).length > 0;
       // 有个人字卡 或 群有群字卡 → 可回复
-      return (c.cards && c.cards.length > 0) || groupHasCards;
+      return hasMine || (c.cards && c.cards.length > 0) || groupHasCards;
     });
     if (members.length === 0) return [];
     // 洗牌

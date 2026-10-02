@@ -61,39 +61,33 @@ window.MineProfile = (function () {
 
     var html = '<div class="scroll me-scroll">';
 
-    // 头部：头像 + 昵称
+    // 头部：头像 + 昵称（仅展示，编辑入口在"个性化"）
     var avatarInner = (meProfile.avatar
       ? '<img src="' + escapeHtml(meProfile.avatar) + '">'
       : '<span class="avatar-gen-text">' + escapeHtml(firstChar(meProfile.name)) + '</span>');
 
     html += '<div class="profile-hero">' +
-      '<div class="avatar-picker">' +
-        '<div class="avatar big-avatar profile-avatar" id="me-avatar" style="position:relative;cursor:pointer;">' +
-          avatarInner +
-          '<div class="cam-badge">' + I.svg("camera", 15) + '</div>' +
-        '</div>' +
-        '<input type="file" accept="image/*" id="me-avatar-file" class="file-hidden">' +
+      '<div class="avatar big-avatar profile-avatar" id="me-avatar" style="position:relative;">' +
+        avatarInner +
       '</div>' +
       '<span class="profile-name" id="me-name-display">' + escapeHtml(meProfile.name || "雾客") + '</span>' +
-      '<span class="profile-status">点击头像更换 · 点击昵称修改</span>' +
+      '<span class="profile-status">在"个性化"中修改昵称与头像</span>' +
       '</div>';
 
     html += '<div class="list-sep"></div>';
 
-    // 昵称修改区
-    html += '<div class="group-head">昵称</div>';
+    // 个性化：昵称 / 头像 / 背景
+    html += '<div class="group-head">个性化</div>';
+
+    // 昵称
     html += '<div class="me-edit-row">' +
       '<input type="text" class="field-input me-name-input" id="me-name-input" ' +
       'value="' + escapeHtml(meProfile.name || "雾客") + '" ' +
       'placeholder="输入你的昵称" maxlength="20">' +
       '<button class="btn btn-primary btn-sm" id="me-name-save">保存</button>' +
       '</div>';
-    html += '<div class="card-hint">昵称将显示在主界面问候语和聊天消息中</div>';
 
-    html += '<div class="list-sep"></div>';
-
-    // 头像操作区
-    html += '<div class="group-head">头像</div>';
+    // 头像
     html += '<div class="func-row" role="button" tabindex="0" data-act="change-avatar">' +
       '<div class="func-icon">' + I.svg("camera", 20) + '</div>' +
       '<div class="func-text">' +
@@ -114,36 +108,29 @@ window.MineProfile = (function () {
       '</div>';
     }
 
-    html += '<div class="list-sep"></div>';
-
-    // 外观设置区：背景（入口收进个人中心）
-    html += '<div class="group-head">外观</div>';
+    // 背景
     html += '<div class="func-row" role="button" tabindex="0" data-act="open-background">' +
       '<div class="func-icon">' + I.svg("background", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">背景</span>' +
-        '<span class="func-sub">切换背景、字体样式与字体颜色</span>' +
+        '<span class="func-sub">模式、背景、字体样式与字体颜色</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
+    html += '<input type="file" accept="image/*" id="me-avatar-file" class="file-hidden">';
+
     html += '<div class="list-sep"></div>';
 
-    // 信息展示区
-    html += '<div class="group-head">关于</div>';
-    html += '<div class="func-row">' +
+    // 字卡
+    html += '<div class="group-head">字卡</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-cards">' +
       '<div class="func-icon">' + I.svg("me", 20) + '</div>' +
       '<div class="func-text">' +
-        '<span class="func-title">当前昵称</span>' +
-        '<span class="func-sub" id="me-about-name">' + escapeHtml(meProfile.name || "雾客") + '</span>' +
+        '<span class="func-title">我的字卡</span>' +
+        '<span class="func-sub">公用字卡所有联系人可用，单独字卡仅指定联系人使用</span>' +
       '</div>' +
-      '</div>';
-    html += '<div class="func-row">' +
-      '<div class="func-icon">' + I.svg("chat", 20) + '</div>' +
-      '<div class="func-text">' +
-        '<span class="func-title">头像状态</span>' +
-        '<span class="func-sub">' + (meProfile.avatar ? "已设置自定义头像" : "使用默认文字头像") + '</span>' +
-      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
     html += '</div>'; // .scroll
@@ -171,19 +158,23 @@ window.MineProfile = (function () {
       });
     }
 
-    // 头像点击 → 选择文件
-    var avatarEl = pageEl.querySelector("#me-avatar");
+    // 字卡入口 → 打开字卡管理器
+    var cardsBtn = pageEl.querySelector('[data-act="open-cards"]');
+    if (cardsBtn) {
+      cardsBtn.addEventListener("click", function () {
+        if (window.MineCards) window.MineCards.openManager();
+      });
+    }
+
+    // 更换头像 → 选择文件
     var fileEl = pageEl.querySelector("#me-avatar-file");
     var changeAvatarBtn = pageEl.querySelector('[data-act="change-avatar"]');
-    if (avatarEl && fileEl) {
+    if (changeAvatarBtn && fileEl) {
       var openPicker = function () { fileEl.click(); };
-      avatarEl.addEventListener("click", openPicker);
-      if (changeAvatarBtn) {
-        changeAvatarBtn.addEventListener("click", openPicker);
-        changeAvatarBtn.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); }
-        });
-      }
+      changeAvatarBtn.addEventListener("click", openPicker);
+      changeAvatarBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); }
+      });
     }
 
     // 文件选择 → 压缩 → 保存
