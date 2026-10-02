@@ -90,13 +90,83 @@ window.MineCards = (function () {
     });
   }
 
-  function addPublicCard(card) {
-    var v = String(card || "").trim();
+  /* ==================== 排序 / 去重 / 批量 ==================== */
+  /** 字卡排序：图片/语音 → 最末；emoji → 次末；文本按首字母 A-Z（中文按拼音） */
+  function compareCards(a, b) {
+    var ia = isImageCard(a) || isAudioCard(a);
+    var ib = isImageCard(b) || isAudioCard(b);
+    if (ia && ib) return 0;
+    if (ia) return 1;
+    if (ib) return -1;
+    var ea = isEmojiCard(a), eb = isEmojiCard(b);
+    if (ea && eb) return String(a).localeCompare(String(b));
+    if (ea) return 1;
+    if (eb) return -1;
+    return String(a).localeCompare(String(b), "zh-Hans-CN", { sensitivity: "base", numeric: true });
+  }
+  function sortList(list) {
+    try { list.sort(compareCards); } catch (e) {}
+    return list;
+  }
+  /** 单条添加：自动去重 + 排序 + 保存 */
+  function addTo(list, v) {
+    v = String(v || "").trim();
     if (!v) return false;
-    state.public.push(v);
+    if (list.indexOf(v) >= 0) return false;  // 自动去重
+    list.push(v);
+    sortList(list);
     save();
     return true;
   }
+  /** 批量添加（按空格拆分），返回 { added, skipped } */
+  function addMany(list, raw) {
+    var parts = String(raw || "").split(/\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (parts.length === 0) return { added: 0, skipped: 0 };
+    var added = 0, skipped = 0;
+    parts.forEach(function (p) {
+      if (addTo(list, p)) added++; else skipped++;
+    });
+    return { added: added, skipped: skipped };
+  }
+  /** 按作用域取存储数组 */
+  function listFor(scope, cid) {
+    if (scope === "public") return state.public;
+    if (scope === "sys") return state.sys;
+    if (scope === "auto") {
+      if (!state.autoPer[cid]) state.autoPer[cid] = [];
+      return state.autoPer[cid];
+    }
+    if (scope === "per") {
+      if (!state.per[cid]) state.per[cid] = [];
+      return state.per[cid];
+    }
+    return null;
+  }
+  /** 修改指定字卡（自动去重 + 排序） */
+  function updateCard(scope, cid, idx, newVal) {
+    var list = listFor(scope, cid);
+    if (!list || idx < 0 || idx >= list.length) return false;
+    newVal = String(newVal || "").trim();
+    if (!newVal) return false;
+    if (list.indexOf(newVal) >= 0 && list[idx] !== newVal) return false;
+    list[idx] = newVal;
+    sortList(list);
+    save();
+    return true;
+  }
+  /** 按作用域删除字卡 */
+  function removeCardByScope(scope, cid, idx) {
+    if (scope === "public") return removePublicCard(idx);
+    if (scope === "sys") return removeSysCard(idx);
+    if (scope === "auto") return removeAutoCard(cid, idx);
+    if (scope === "per") return removePerCard(cid, idx);
+    return false;
+  }
+
+  function addPublicCard(card) {
+    return addTo(state.public, card);
+  }
+  function addPublicCards(raw) { return addMany(state.public, raw); }
   function removePublicCard(idx) {
     if (idx < 0 || idx >= state.public.length) return false;
     state.public.splice(idx, 1);
@@ -104,12 +174,9 @@ window.MineCards = (function () {
     return true;
   }
   function addSysCard(card) {
-    var v = String(card || "").trim();
-    if (!v) return false;
-    state.sys.push(v);
-    save();
-    return true;
+    return addTo(state.sys, card);
   }
+  function addSysCards(raw) { return addMany(state.sys, raw); }
   function removeSysCard(idx) {
     if (idx < 0 || idx >= state.sys.length) return false;
     state.sys.splice(idx, 1);
@@ -122,12 +189,14 @@ window.MineCards = (function () {
     return state.autoPer[cid].slice();
   }
   function addAutoCard(cid, card) {
-    var v = String(card || "").trim();
-    if (!v || !cid) return false;
+    if (!cid) return false;
     if (!state.autoPer[cid]) state.autoPer[cid] = [];
-    state.autoPer[cid].push(v);
-    save();
-    return true;
+    return addTo(state.autoPer[cid], card);
+  }
+  function addAutoCards(cid, raw) {
+    if (!cid) return { added: 0, skipped: 0 };
+    if (!state.autoPer[cid]) state.autoPer[cid] = [];
+    return addMany(state.autoPer[cid], raw);
   }
   function removeAutoCard(cid, idx) {
     if (!cid || !state.autoPer[cid]) return false;
@@ -137,12 +206,14 @@ window.MineCards = (function () {
     return true;
   }
   function addPerCard(cid, card) {
-    var v = String(card || "").trim();
-    if (!cid || !v) return false;
+    if (!cid) return false;
     if (!state.per[cid]) state.per[cid] = [];
-    state.per[cid].push(v);
-    save();
-    return true;
+    return addTo(state.per[cid], card);
+  }
+  function addPerCards(cid, raw) {
+    if (!cid) return { added: 0, skipped: 0 };
+    if (!state.per[cid]) state.per[cid] = [];
+    return addMany(state.per[cid], raw);
   }
   function removePerCard(cid, idx) {
     if (!cid || !state.per[cid]) return false;
@@ -274,22 +345,23 @@ window.MineCards = (function () {
 
   /* ---- 类型分栏编辑器：每一栏一种字卡类型，点击栏头折叠/展开
        includeAudio=true 时额外显示语音栏（单独字卡）
-       单独字卡（scope=per 且有 cid）额外显示"自动回复"栏（仅自动回复场景使用） ---- */
+       单独字卡（scope=per 且有 cid）的"自动回复"栏置顶（在字符字卡上面） ---- */
   function renderCardEditor(list, scope, cid, includeAudio) {
-    var groups = [
-      { type: "text",  name: "字符", icon: "feather", items: [] },
-      { type: "emoji", name: "emoji", icon: "smile", items: [] },
-      { type: "image", name: "图片", icon: "image", items: [] }
-    ];
-    if (includeAudio) {
-      groups.push({ type: "audio", name: "语音", icon: "mic", items: [] });
-    }
-    /* 单独字卡：自动回复栏（与字符、emoji 等并列） */
+    var groups = [];
+    /* 单独字卡：自动回复栏置顶（与字符、emoji 等并列，排最前） */
     if (scope === "per" && cid) {
       var autoList = (state.autoPer[cid] || []).map(function (card, i) {
         return { card: card, idx: i };
       });
       groups.push({ type: "auto", name: "自动回复", icon: "feather", items: autoList });
+    }
+    groups.push(
+      { type: "text",  name: "字符", icon: "feather", items: [] },
+      { type: "emoji", name: "emoji", icon: "smile", items: [] },
+      { type: "image", name: "图片", icon: "image", items: [] }
+    );
+    if (includeAudio) {
+      groups.push({ type: "audio", name: "语音", icon: "mic", items: [] });
     }
     (list || []).forEach(function (card, i) {
       var entry = { card: card, idx: i };
@@ -462,11 +534,18 @@ window.MineCards = (function () {
         else input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
         var v = input ? input.value : "";
         if (!v) { showToast("请输入字卡内容"); return; }
-        var ok = (scope === "public") ? addPublicCard(v)
-               : (scope === "sys") ? addSysCard(v)
-               : (scope === "auto") ? addAutoCard(cid, v)
-               : addPerCard(cid, v);
-        if (ok && input) input.value = "";
+        /* 批量添加：按空格拆分，自动去重 */
+        var r;
+        if (scope === "public") r = addPublicCards(v);
+        else if (scope === "sys") r = addSysCards(v);
+        else if (scope === "auto") r = addAutoCards(cid, v);
+        else r = addPerCards(cid, v);
+        if (r.added > 0 && input) input.value = "";
+        var msg = "";
+        if (r.added > 0) msg = "已添加 " + r.added + " 条";
+        if (r.skipped > 0) msg += (msg ? "，" : "") + "跳过重复 " + r.skipped + " 条";
+        if (!r.added && r.skipped > 0) msg = "字卡已存在，未重复添加";
+        if (msg) showToast(msg);
         render();
       });
       btn.addEventListener("keydown", function (e) {
@@ -555,6 +634,210 @@ window.MineCards = (function () {
     sheetEl.classList.remove("is-open");
   }
 
+  /* ==================== 全部字卡：搜索 / 增删改 ==================== */
+  var searchSheetEl = null;
+  var searchOverlayEl = null;
+  var searchKeyword = "";
+
+  function openSearch() {
+    if (!searchSheetEl) {
+      searchOverlayEl = document.createElement("div");
+      searchOverlayEl.className = "sheet-overlay";
+      searchOverlayEl.addEventListener("click", closeSearch);
+
+      searchSheetEl = document.createElement("div");
+      searchSheetEl.className = "sheet";
+      searchSheetEl.innerHTML =
+        '<div class="sheet-handle"></div>' +
+        '<div class="sheet-head"><h2>全部字卡</h2>' +
+        '<button class="nav-btn" data-act="close">' + I.svg("close", 20) + '</button></div>' +
+        '<div class="sheet-body" id="cards-search-body"></div>';
+      document.body.appendChild(searchOverlayEl);
+      document.body.appendChild(searchSheetEl);
+      searchSheetEl.querySelector('[data-act="close"]').addEventListener("click", closeSearch);
+    }
+    renderSearch();
+    requestAnimationFrame(function () {
+      searchOverlayEl.classList.add("is-open");
+      searchSheetEl.classList.add("is-open");
+    });
+  }
+  function closeSearch() {
+    if (!searchSheetEl) return;
+    searchOverlayEl.classList.remove("is-open");
+    searchSheetEl.classList.remove("is-open");
+  }
+
+  /** 收集全部字卡：公用 / 系统 / 单独 / 自动回复 */
+  function collectAll() {
+    var out = [];
+    state.public.forEach(function (card, i) {
+      out.push({ scope: "public", cid: null, idx: i, card: card, label: "公用字卡" });
+    });
+    state.sys.forEach(function (card, i) {
+      out.push({ scope: "sys", cid: null, idx: i, card: card, label: "系统字卡" });
+    });
+    Object.keys(state.per).forEach(function (cid) {
+      (state.per[cid] || []).forEach(function (card, i) {
+        out.push({ scope: "per", cid: cid, idx: i, card: card, label: "单独 · " + contactName(cid) });
+      });
+    });
+    Object.keys(state.autoPer).forEach(function (cid) {
+      (state.autoPer[cid] || []).forEach(function (card, i) {
+        out.push({ scope: "auto", cid: cid, idx: i, card: card, label: "自动回复 · " + contactName(cid) });
+      });
+    });
+    return out;
+  }
+
+  function searchFilter(card, kw) {
+    if (!kw) return true;
+    if (isImageCard(card) || isAudioCard(card)) return false;  /* 图片/语音无文本，不参与关键词搜索 */
+    return String(card).toLowerCase().indexOf(kw) >= 0;
+  }
+
+  function cardPreviewHTML(card) {
+    if (isImageCard(card)) return '<img class="sitem-img" src="' + escapeHtml(card) + '" alt="图片字卡">';
+    if (isAudioCard(card)) return '<span class="sitem-voice">' + I.svg("mic", 14) + ' 语音</span>';
+    if (isEmojiCard(card)) return '<span class="sitem-emoji">' + escapeHtml(card) + '</span>';
+    return '<span class="sitem-text">' + escapeHtml(card) + '</span>';
+  }
+
+  function renderSearch() {
+    var body = document.getElementById("cards-search-body");
+    if (!body) return;
+
+    /* 目标选择选项 */
+    var targetOpts = '<option value="public">公用字卡</option>' +
+      '<option value="sys">系统字卡</option>';
+    listContacts().forEach(function (t) {
+      var nm = escapeHtml(t.name || t.nickname || t.id);
+      targetOpts += '<option value="per:' + escapeHtml(t.id) + '">单独 · ' + nm + '</option>';
+    });
+    listContacts().forEach(function (t) {
+      var nm = escapeHtml(t.name || t.nickname || t.id);
+      targetOpts += '<option value="auto:' + escapeHtml(t.id) + '">自动回复 · ' + nm + '</option>';
+    });
+
+    var html =
+      '<div class="card-search-row">' +
+        '<span class="card-search-icon">' + I.svg("search", 16) + '</span>' +
+        '<input type="text" class="card-search-input" id="card-search-input" ' +
+          'placeholder="搜索字卡内容" value="' + escapeHtml(searchKeyword) + '">' +
+        '<button class="card-search-add-btn" id="card-search-open-add">' + I.svg("plus", 16) + ' 添加</button>' +
+      '</div>' +
+      '<div class="card-search-addbox" id="card-search-addbox" style="display:none;">' +
+        '<div class="card-add-row">' +
+          '<select class="card-search-target" id="card-search-target">' + targetOpts + '</select>' +
+        '</div>' +
+        '<div class="card-add-row">' +
+          '<input type="text" class="card-input" id="card-search-new" ' +
+            'placeholder="输入字卡内容，空格分隔可批量添加" maxlength="200">' +
+          '<button class="card-add-btn" id="card-search-save" aria-label="保存">' + I.svg("check", 18) + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-search-list" id="card-search-list"></div>';
+
+    body.innerHTML = html;
+
+    var kw = searchKeyword.toLowerCase();
+    var items = collectAll().filter(function (it) { return searchFilter(it.card, kw); });
+    var listEl = body.querySelector("#card-search-list");
+    if (items.length === 0) {
+      listEl.innerHTML = '<div class="cards-empty">' + (kw ? "未找到匹配的字卡" : "暂无字卡") + '</div>';
+    } else {
+      listEl.innerHTML = items.map(function (it, j) {
+        return '<div class="sitem" data-row="' + j + '">' +
+          '<div class="sitem-main">' +
+            '<div class="sitem-preview">' + cardPreviewHTML(it.card) + '</div>' +
+            '<div class="sitem-info">' +
+              '<span class="sitem-tag">' + escapeHtml(it.label) + '</span>' +
+              '<span class="sitem-idx">#' + (it.idx + 1) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="sitem-actions">' +
+            '<button class="sitem-btn" data-edit="' + j + '">' + I.svg("pencil", 14) + ' 修改</button>' +
+            '<button class="sitem-btn is-danger" data-del="' + j + '">' + I.svg("trash", 14) + ' 删除</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+      bindSearchList(body, items);
+    }
+
+    /* 搜索输入实时过滤 */
+    var searchInput = body.querySelector("#card-search-input");
+    searchInput.addEventListener("input", function () {
+      searchKeyword = searchInput.value;
+      renderSearch();
+    });
+    /* 展开/收起添加区 */
+    var openAdd = body.querySelector("#card-search-open-add");
+    var addBox = body.querySelector("#card-search-addbox");
+    openAdd.addEventListener("click", function () {
+      var show = addBox.style.display === "none";
+      addBox.style.display = show ? "block" : "none";
+      if (show) body.querySelector("#card-search-new").focus();
+    });
+    /* 添加：按空格批量、自动去重 */
+    var saveBtn = body.querySelector("#card-search-save");
+    saveBtn.addEventListener("click", function () {
+      var target = body.querySelector("#card-search-target").value;
+      var val = body.querySelector("#card-search-new").value;
+      if (!val.trim()) { showToast("请输入字卡内容"); return; }
+      var r;
+      if (target === "public") r = addPublicCards(val);
+      else if (target === "sys") r = addSysCards(val);
+      else if (target.indexOf("auto:") === 0) r = addAutoCards(target.slice(5), val);
+      else if (target.indexOf("per:") === 0) r = addPerCards(target.slice(4), val);
+      var msg = r.added > 0 ? "已添加 " + r.added + " 条" : "";
+      if (r.skipped > 0) msg += (msg ? "，" : "") + "跳过重复 " + r.skipped + " 条";
+      showToast(msg || "字卡已存在，未重复添加");
+      body.querySelector("#card-search-new").value = "";
+      renderSearch();
+    });
+  }
+
+  function bindSearchList(body, items) {
+    /* 修改：行内编辑 */
+    body.querySelectorAll("[data-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest(".sitem");
+        var j = parseInt(btn.getAttribute("data-edit"), 10);
+        var it = items[j];
+        var prev = row.querySelector(".sitem-preview");
+        prev.innerHTML =
+          '<input type="text" class="card-input sitem-edit-input" value="' +
+          (isImageCard(it.card) || isAudioCard(it.card) ? "" : escapeHtml(it.card)) +
+          '" placeholder="输入新内容">';
+        row.querySelector(".sitem-actions").innerHTML =
+          '<button class="sitem-btn is-primary" data-save="' + j + '">' + I.svg("check", 14) + ' 保存</button>' +
+          '<button class="sitem-btn" data-cancel>取消</button>';
+        var saveBtn = row.querySelector("[data-save]");
+        var cancelBtn = row.querySelector("[data-cancel]");
+        cancelBtn.addEventListener("click", function () { renderSearch(); });
+        saveBtn.addEventListener("click", function () {
+          var input = row.querySelector(".sitem-edit-input");
+          var v = input.value;
+          if (!v.trim()) { showToast("内容不能为空"); return; }
+          var ok = updateCard(it.scope, it.cid, it.idx, v);
+          showToast(ok ? "已修改" : "修改失败：内容为空或与其他字卡重复");
+          renderSearch();
+        });
+        input && setTimeout(function () { input.focus(); }, 50);
+      });
+    });
+    /* 删除 */
+    body.querySelectorAll("[data-del]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var j = parseInt(btn.getAttribute("data-del"), 10);
+        var it = items[j];
+        var ok = removeCardByScope(it.scope, it.cid, it.idx);
+        showToast(ok ? "已删除" : "删除失败");
+        renderSearch();
+      });
+    });
+  }
+
   /* ==================== 初始化 ==================== */
   function init() {
     load();
@@ -564,6 +847,8 @@ window.MineCards = (function () {
     init: init,
     openManager: openManager,
     closeManager: closeManager,
+    openSearch: openSearch,
+    closeSearch: closeSearch,
     getPublicCards: getPublicCards,
     getPerCards: getPerCards,
     getSysCards: getSysCards,
@@ -571,13 +856,19 @@ window.MineCards = (function () {
     getReplyPool: getReplyPool,
     hasAnyCards: hasAnyCards,
     addPublicCard: addPublicCard,
+    addPublicCards: addPublicCards,
     removePublicCard: removePublicCard,
     addSysCard: addSysCard,
+    addSysCards: addSysCards,
     removeSysCard: removeSysCard,
     addAutoCard: addAutoCard,
+    addAutoCards: addAutoCards,
     removeAutoCard: removeAutoCard,
     addPerCard: addPerCard,
+    addPerCards: addPerCards,
     removePerCard: removePerCard,
+    updateCard: updateCard,
+    removeCardByScope: removeCardByScope,
     isImageCard: isImageCard,
     isAudioCard: isAudioCard,
     isEmojiCard: isEmojiCard,

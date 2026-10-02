@@ -121,6 +121,16 @@ window.MineProfile = (function () {
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
 
+    // 全部字卡（搜索 / 增删改）
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-search-cards">' +
+      '<div class="func-icon">' + I.svg("search", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">全部字卡</span>' +
+        '<span class="func-sub">搜索关键词，可增删修改所有字卡</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+
     html += '<div class="list-sep"></div>';
 
     // 概率修改
@@ -181,6 +191,20 @@ window.MineProfile = (function () {
       meBtn.addEventListener("click", openMeSheet);
       meBtn.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMeSheet(); }
+      });
+    }
+
+    // 全部字卡入口 → 打开搜索 / 增删改面板
+    var searchCardsBtn = pageEl.querySelector('[data-act="open-search-cards"]');
+    if (searchCardsBtn) {
+      searchCardsBtn.addEventListener("click", function () {
+        if (window.MineCards && window.MineCards.openSearch) window.MineCards.openSearch();
+      });
+      searchCardsBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (window.MineCards && window.MineCards.openSearch) window.MineCards.openSearch();
+        }
       });
     }
 
