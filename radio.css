@@ -45,6 +45,224 @@
 .radio-upload-text { font-size: 14px; color: var(--t-secondary); }
 .radio-upload-hint { font-size: 12px; color: var(--t-faint); }
 
+/* ---------- 添加音乐链接（音频直链） ---------- */
+.radio-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-5) var(--sp-2);
+}
+.radio-url-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--bd-medium);
+  border-radius: var(--r-md);
+  background: var(--glass-2);
+  color: var(--t-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+.radio-url-input:focus { border-color: var(--accent); }
+.radio-url-input::placeholder { color: var(--t-faint); }
+.radio-url-add {
+  flex: none;
+  height: 40px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.radio-url-add:active { background: var(--glass-press); }
+.radio-url-hint {
+  font-size: 12px;
+  color: var(--t-faint);
+  margin: 0 var(--sp-5) var(--sp-3);
+  line-height: 1.5;
+}
+.radio-item-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.6;
+  border: 1px solid var(--bd-medium);
+  border-radius: var(--r-pill);
+  color: var(--t-tertiary);
+  vertical-align: middle;
+}
+.radio-item-tag.is-url {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- 网易云音乐接入区 ---------- */
+.radio-netease {
+  margin: var(--sp-2) var(--sp-5) var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--bd-medium);
+  border-radius: var(--r-lg);
+  background: var(--glass-1);
+}
+.radio-netease-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.radio-netease-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t-primary);
+}
+.radio-netease-btn {
+  flex: none;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--bd-medium);
+  border-radius: var(--r-pill);
+  background: var(--glass-2);
+  color: var(--t-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.radio-netease-btn.is-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.radio-netease-btn:active { background: var(--glass-press); }
+.radio-netease-api {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.radio-netease-hint {
+  font-size: 12px;
+  color: var(--t-faint);
+  line-height: 1.6;
+}
+.radio-netease-hint b { color: var(--t-secondary); }
+.radio-netease-sub {
+  font-size: 12px;
+  color: var(--t-tertiary);
+  margin: var(--sp-3) 0 var(--sp-2);
+}
+.radio-netease-empty {
+  font-size: 12px;
+  color: var(--t-faint);
+  padding: var(--sp-3) 0;
+}
+.radio-netease-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.radio-netease-results { margin-top: var(--sp-2); }
+
+/* 歌单网格 */
+.netease-playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+}
+.netease-playlist {
+  cursor: pointer;
+  text-align: left;
+}
+.netease-playlist-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  object-fit: cover;
+  background: var(--glass-2);
+}
+.netease-playlist-name {
+  font-size: 11px;
+  color: var(--t-secondary);
+  margin-top: var(--sp-1);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.netease-playlist-count { font-size: 10px; color: var(--t-faint); }
+
+/* 歌曲列表 */
+.netease-song-list { margin-top: var(--sp-1); }
+.netease-song {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--bd-soft);
+  cursor: pointer;
+}
+.netease-song:active { background: var(--glass-press); }
+.netease-song-idx {
+  flex: none;
+  width: 18px;
+  font-size: 11px;
+  color: var(--t-faint);
+  text-align: center;
+}
+.netease-song-info { flex: 1; min-width: 0; }
+.netease-song-name {
+  font-size: 13px;
+  color: var(--t-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.netease-vip {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  font-size: 9px;
+  line-height: 1.6;
+  border: 1px solid #e6b347;
+  border-radius: var(--r-pill);
+  color: #b8860b;
+  vertical-align: middle;
+}
+.netease-song-artist {
+  font-size: 11px;
+  color: var(--t-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.netease-song-play { flex: none; color: var(--accent); }
+
+/* 扫码登录弹层 */
+.netease-qr-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--sp-5) 0 var(--sp-6);
+}
+.netease-qr-img {
+  width: 200px;
+  height: 200px;
+  border-radius: var(--r-md);
+  background: #fff;
+  object-fit: contain;
+}
+.netease-qr-status {
+  margin-top: var(--sp-3);
+  font-size: 13px;
+  color: var(--t-secondary);
+}
+
 /* ---------- 歌曲列表 ---------- */
 .radio-list { padding: 0 var(--sp-5) var(--sp-4); }
 .radio-list-label {

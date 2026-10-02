@@ -3,11 +3,15 @@
    ------------------------------------------------------------------------
    功能：
    · 上传本地音乐（多选）
+   · 添加音乐链接（粘贴音频直链，在线播放，不占用本地存储）
    · 播放 / 暂停 / 上一首 / 下一首 / 退出
    · 悬浮黑胶唱片（全界面可见，旋转动画）
    · 控制面板（点击唱片展开）
-   · 歌曲列表持久化（localStorage）
+   · 歌曲列表持久化（IndexedDB，localStorage 兜底）
    接入：通过 MineCompanion.register("mood-radio") 注册。
+   说明：网易云音乐 / QQ 音乐官方未开放第三方网页播放接口（扫码登录
+   需自建非官方服务，不稳定且有版权风险），故本站采用"本地音乐 +
+   音频直链"两种最简洁的接入方式。
    ======================================================================== */
 
 window.MineRadio = (function () {
@@ -341,7 +345,8 @@ window.MineRadio = (function () {
     if (index < 0 || index >= songs.length) return;
     currentIndex = index;
     var song = songs[index];
-    audioEl.src = song.dataUrl;
+    /* 兼容两种来源：本地上传存 dataUrl，链接添加存 url */
+    audioEl.src = song.dataUrl || song.url;
     audioEl.play().catch(function () {});
     showFloat();
     updateVinyl();
@@ -465,6 +470,34 @@ window.MineRadio = (function () {
     });
   }
 
+  /* ---------------- 添加音乐链接（音频直链） ----------------
+     在线播放不占用本地存储；仅接受 http(s) 直链。
+     网易云 / QQ 音乐官方未开放网页播放接口，扫码登录暂不可用，
+     故采用直链这一最简洁稳定的接入方式。 */
+  function addSongByUrl(url, name) {
+    var v = String(url || "").trim();
+    if (!/^https?:\/\//i.test(v)) {
+      showToast("请输入以 http:// 或 https:// 开头的音频链接");
+      return false;
+    }
+    var n = String(name || "").trim();
+    if (!n) {
+      var parts = v.split("/");
+      var last = decodeURIComponent(parts[parts.length - 1] || "");
+      n = last.replace(/\.[^.]+$/, "") || "网络音乐";
+    }
+    var song = { id: uid(), name: n, url: v, type: "url" };
+    songs.push(song);
+    if (useDB) saveSongToDB(song);
+    else saveToStorage();
+    if (pageEl) {
+      pageEl.innerHTML = viewRadio();
+      bindRadio();
+    }
+    showToast("已添加《" + n + "》");
+    return true;
+  }
+
   /* ---------------- 删除歌曲 ---------------- */
   function removeSong(id) {
     var idx = -1;
@@ -538,6 +571,17 @@ window.MineRadio = (function () {
     html += '<input type="file" id="radio-file-input" accept="audio/*" multiple style="display:none">';
     html += '</div>';
 
+    // 添加音乐链接区（在线播放，不占用本地存储）
+    html += '<div class="radio-url-row">';
+    html += '<input class="radio-url-input" id="radio-url-input" ' +
+      'placeholder="粘贴音频链接（mp3 / m4a / flac 直链）" inputmode="url">';
+    html += '<button class="radio-url-add" id="radio-url-add">添加</button>';
+    html += '</div>';
+    html += '<div class="radio-url-hint">网易云 / QQ 音乐官方未开放网页播放接口，粘贴音频直链即可全界面播放；也可用下方网易云音乐扫码登录。</div>';
+
+    // 网易云音乐接入区（netease.js 渲染：扫码登录 / 我的歌单 / 搜索）
+    html += '<div class="radio-netease" id="radio-netease"></div>';
+
     // 歌曲列表
     html += '<div class="radio-list">';
     if (songs.length === 0) {
@@ -546,10 +590,13 @@ window.MineRadio = (function () {
       html += '<div class="radio-list-label">播放列表 · ' + songs.length + ' 首</div>';
       songs.forEach(function (song, i) {
         var playing = (i === currentIndex) ? ' is-playing' : '';
+        var tag = (song.type === "url")
+          ? '<span class="radio-item-tag is-url">链接</span>'
+          : '<span class="radio-item-tag">本地</span>';
         html += '<div class="radio-item' + playing + '" data-index="' + i + '">';
         html += '<div class="radio-item-num">' + (i + 1) + '</div>';
         html += '<div class="radio-item-info">';
-        html += '<div class="radio-item-name">' + escapeHtml(song.name) + '</div>';
+        html += '<div class="radio-item-name">' + escapeHtml(song.name) + tag + '</div>';
         html += '<div class="radio-item-dur">点击播放</div>';
         html += '</div>';
         html += '<div class="radio-item-del" data-del-index="' + i + '">' + I.svg("trash", 14) + '</div>';
@@ -585,6 +632,29 @@ window.MineRadio = (function () {
         if (this.files && this.files.length > 0) {
           addSongs(this.files);
           this.value = "";
+        }
+      });
+    }
+
+    // 添加音乐链接
+    var urlInput = pageEl.querySelector("#radio-url-input");
+    var urlAdd = pageEl.querySelector("#radio-url-add");
+    if (urlInput && urlAdd) {
+      var doAddUrl = function () {
+        if (addSongByUrl(urlInput.value)) urlInput.value = "";
+      };
+      urlAdd.addEventListener("click", doAddUrl);
+      urlInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); doAddUrl(); }
+      });
+    }
+
+    // 网易云音乐区：挂载 netease.js 面板；播放回调 = 加入电台列表并播放
+    var neContainer = pageEl.querySelector("#radio-netease");
+    if (neContainer && window.MineNetease) {
+      MineNetease.mount(neContainer, function (url, name) {
+        if (addSongByUrl(url, name)) {
+          playSong(songs.length - 1);
         }
       });
     }
@@ -636,6 +706,7 @@ window.MineRadio = (function () {
   return {
     open: open,
     addSongs: addSongs,
+    addSongByUrl: addSongByUrl,
     playSong: playSong,
     togglePlay: togglePlay,
     playNext: playNext,
