@@ -52,6 +52,9 @@ button, input { font-family: inherit; color: inherit; }
       #181b1d 100%);
 }
 
+/* 黑夜模式：点击"黑夜"直接变成纯黑背景 */
+body.theme-night .bg-base { background: #000; }
+
 /* L1 · 用户背景图 */
 .bg-image {
   background-size: cover;
