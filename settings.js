@@ -14,7 +14,12 @@
    ======================================================================== */
 window.MineSettings = (function () {
   "use strict";
-  var I = window.MineIcons;
+  /* MineIcons 在本文件之后才加载（见 index.html 脚本顺序），
+     必须延迟到调用时再解析，否则 I.svg 抛异常导致设置页打不开。 */
+  function iconSvg(name, size) {
+    var M = window.MineIcons;
+    return M && M.svg ? M.svg(name, size) : "";
+  }
   var SETTINGS_KEY = "mine.settings.v1";
   var prefs = { notify: true, background: true, nodedup: false, noduck: true };
   /* ---------------- 持久化 ---------------- */
@@ -57,7 +62,7 @@ window.MineSettings = (function () {
     load();
     var navBar =
       '<div class="nav-bar">' +
-        '<button class="nav-btn" data-act="back">' + I.svg("back", 20) + '返回</button>' +
+        '<button class="nav-btn" data-act="back">' + iconSvg("back", 20) + '返回</button>' +
         '<span class="nav-title">设置</span>' +
         '<span class="nav-right"></span>' +
       '</div>';
@@ -77,7 +82,7 @@ window.MineSettings = (function () {
       "开启后保活走 WebAudio 通道，不占用媒体通道、不压低音乐（默认开）", prefs.noduck);
     // 测试通知按钮
     html += '<div class="func-row">' +
-      '<div class="func-icon">' + I.svg("check", 20) + '</div>' +
+      '<div class="func-icon">' + iconSvg("check", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">测试通知</span>' +
         '<span class="func-sub">体检权限与通道，并真发一条系统通知</span>' +
@@ -97,7 +102,7 @@ window.MineSettings = (function () {
   /* 开关行构建 */
   function switchRow(id, icon, title, sub, checked) {
     return '<div class="func-row">' +
-      '<div class="func-icon">' + I.svg(icon, 20) + '</div>' +
+      '<div class="func-icon">' + iconSvg(icon, 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">' + title + '</span>' +
         '<span class="func-sub">' + sub + '</span>' +
