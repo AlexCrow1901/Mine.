@@ -50,7 +50,7 @@ window.MineTheme = (function () {
   ];
 
   var STORAGE_KEY = "mine.theme.v1";
-  var currentTheme = "fog";
+  var currentTheme = "neumorphism";
   var dom = {};
 
   /* ====== 工具函数 ====== */
@@ -108,8 +108,8 @@ window.MineTheme = (function () {
 
   /* ====== 加载保存的主题 ====== */
   function loadTheme() {
-    var saved = "fog";
-    try { saved = localStorage.getItem(STORAGE_KEY) || "fog"; } catch (e) {}
+    var saved = "neumorphism";
+    try { saved = localStorage.getItem(STORAGE_KEY) || "neumorphism"; } catch (e) {}
     switchTheme(saved);
   }
 
