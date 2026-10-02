@@ -116,6 +116,19 @@ window.MineProfile = (function () {
 
     html += '<div class="list-sep"></div>';
 
+    // 外观设置区：背景（入口收进个人中心）
+    html += '<div class="group-head">外观</div>';
+    html += '<div class="func-row" role="button" tabindex="0" data-act="open-background">' +
+      '<div class="func-icon">' + I.svg("background", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">背景</span>' +
+        '<span class="func-sub">切换背景、字体样式与字体颜色</span>' +
+      '</div>' +
+      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '</div>';
+
+    html += '<div class="list-sep"></div>';
+
     // 信息展示区
     html += '<div class="group-head">关于</div>';
     html += '<div class="func-row">' +
@@ -149,6 +162,14 @@ window.MineProfile = (function () {
     if (backBtn) backBtn.addEventListener("click", function () {
       window.MineApp.goHome();
     });
+
+    // 背景入口 → 打开背景管理器
+    var bgBtn = pageEl.querySelector('[data-act="open-background"]');
+    if (bgBtn) {
+      bgBtn.addEventListener("click", function () {
+        if (window.MineBackground) window.MineBackground.openManager();
+      });
+    }
 
     // 头像点击 → 选择文件
     var avatarEl = pageEl.querySelector("#me-avatar");
