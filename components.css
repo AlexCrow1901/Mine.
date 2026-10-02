@@ -753,6 +753,16 @@ input[type="range"].slider::-moz-range-thumb {
 }
 
 /* ---------- 概率修改面板 ---------- */
+.prob-group-title {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--t-tertiary);
+}
+.prob-group-title:first-of-type {
+  margin-top: 0;
+}
 .prob-list {
   display: flex;
   flex-direction: column;

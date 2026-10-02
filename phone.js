@@ -57,6 +57,40 @@ window.MinePhone = (function () {
   var MAX_LOG = 200;
   var I = window.MineIcons;
 
+  /* ---------------- 概率自定义（与 MineProbs 联动） ----------------
+     CONFIG 中所有 *Chance / *Ratio 概率项均可由"个人中心 → 概率修改"
+     实时覆盖。PROB_MAP: [CONFIG 键, MineProbs 键]（MineProbs 值为百分比）。
+  */
+  var PROB_MAP = {
+    incomingChance:         ["phoneIncoming",        0.5],
+    hangupChance:           ["phoneHangup",          2],
+    cardMessageChance:      ["phoneCardMsg",         49],
+    voiceMessageChance:     ["phoneVoiceMsg",        49],
+    missedCardChance:       ["phoneMissedCard",      49],
+    missedVoiceChance:      ["phoneMissedVoice",     49],
+    autoCardRatio:          ["phoneAutoRatio",       70],
+    emojiAttachChance:      ["phoneEmojiAttach",     2],
+    connectedHangupChance:  ["phoneConnectedHangup", 1],
+    groupInvite1Chance:     ["phoneGroupInvite1",    10],
+    groupInvite2Chance:     ["phoneGroupInvite2",    35],
+    groupCallChance:        ["phoneGroupCall",       0.5],
+    normalCard1Chance:      ["phoneNormal1",         75],
+    normalCard2Chance:      ["phoneNormal2",         20],
+    voiceMsg1Chance:        ["phoneVoice1",          70],
+    voiceMsg2Chance:        ["phoneVoice2",          20],
+    emojiAttach2Chance:     ["phoneEmoji2",          20]
+  };
+  function applyProbs() {
+    var P = window.MineProbs;
+    if (!P || !P.get) return;
+    for (var key in PROB_MAP) {
+      var v = P.get(PROB_MAP[key][0]);
+      if (typeof v === "number" && !isNaN(v)) {
+        CONFIG[key] = v / 100;
+      }
+    }
+  }
+
   /* ---------------- 通话记录 ---------------- */
   var callLog = [];
 
@@ -1166,6 +1200,7 @@ window.MinePhone = (function () {
 
   /* ==================== 初始化 ==================== */
   function init() {
+    applyProbs();                              // 应用概率修改
     loadLog();
     callSchedule = {};                         // 重置调度表
     groupSchedule = {};                        // 重置群通话调度表

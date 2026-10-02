@@ -15,14 +15,33 @@ window.MineProbs = (function () {
   var U = window.MineUtils;
   var STORE_KEY = "mine.probabilities.v1";
 
-  /* 系统预设概率一览（key: 默认值(百分比)） */
+  /* 系统预设概率一览（key: 默认值(百分比，允许小数)） */
   var DEFAULTS = {
+    /* —— 聊天 —— */
     imageCard:     5,   // 图片字卡发送概率
     emojiCard:    10,   // emoji 字卡发送概率
     audioCard:     3,   // 语音字卡发送概率
     emojiAttach:  15,   // 文字字卡附带 emoji 概率
     silentChance:  1,   // 自动回复沉默概率
-    groupSecond:  40    // 群聊(≤2人)第二条回复概率
+    groupSecond:  40,   // 群聊(≤2人)第二条回复概率
+    /* —— 电话 —— */
+    phoneIncoming:        0.5,  // 联系人主动来电概率
+    phoneHangup:          2,    // 呼出时对方直接挂断概率
+    phoneCardMsg:         49,   // 挂断后附字卡留言概率
+    phoneVoiceMsg:        49,   // 挂断后附语音留言概率
+    phoneMissedCard:      49,   // 未接来电后附字卡留言概率
+    phoneMissedVoice:     49,   // 未接来电后附语音留言概率
+    phoneAutoRatio:       70,   // 留言中自动回复字卡占比
+    phoneEmojiAttach:     2,    // 字卡留言附赠 emoji 概率
+    phoneConnectedHangup: 1,    // 通话中对方主动挂断概率
+    phoneGroupInvite1:    10,   // 群电话邀请 1 人概率
+    phoneGroupInvite2:    35,   // 群电话邀请 2 人概率
+    phoneGroupCall:       0.5,  // 群成员发起通话概率
+    phoneNormal1:         75,   // 字卡留言发 1 条概率
+    phoneNormal2:         20,   // 字卡留言发 2 条概率
+    phoneVoice1:          70,   // 语音留言发 1 条概率
+    phoneVoice2:          20,   // 语音留言发 2 条概率
+    phoneEmoji2:          20    // 附赠 2 个 emoji 概率
   };
 
   var state = null;
@@ -33,7 +52,7 @@ window.MineProbs = (function () {
     return s;
   }
   function clamp(v) {
-    v = parseInt(v, 10);
+    v = parseFloat(v);
     if (isNaN(v)) return 0;
     if (v < 0) return 0;
     if (v > 100) return 100;
@@ -82,13 +101,41 @@ window.MineProbs = (function () {
   var sheetEl = null;
   var overlayEl = null;
 
-  var ITEMS = [
-    { key: "imageCard",    name: "图片字卡发送", desc: "对方回复时发送图片字卡的概率" },
-    { key: "emojiCard",    name: "emoji 字卡发送", desc: "对方回复时发送 emoji 字卡的概率" },
-    { key: "audioCard",    name: "语音字卡发送", desc: "对方回复时发送语音字卡的概率" },
-    { key: "emojiAttach",  name: "文字附带 emoji", desc: "文字回复时附带 emoji 字卡的概率" },
-    { key: "silentChance", name: "自动回复沉默", desc: "触发自动回复（而非普通回复）的概率" },
-    { key: "groupSecond",  name: "群聊第二条回复", desc: "群聊（≤2 人）出现第二条回复的概率" }
+  /* 分组：聊天 / 电话 */
+  var GROUPS = [
+    {
+      title: "聊天",
+      items: [
+        { key: "imageCard",    name: "图片字卡发送", desc: "对方回复时发送图片字卡的概率" },
+        { key: "emojiCard",    name: "emoji 字卡发送", desc: "对方回复时发送 emoji 字卡的概率" },
+        { key: "audioCard",    name: "语音字卡发送", desc: "对方回复时发送语音字卡的概率" },
+        { key: "emojiAttach",  name: "文字附带 emoji", desc: "文字回复时附带 emoji 字卡的概率" },
+        { key: "silentChance", name: "自动回复沉默", desc: "触发自动回复（而非普通回复）的概率" },
+        { key: "groupSecond",  name: "群聊第二条回复", desc: "群聊（≤2 人）出现第二条回复的概率" }
+      ]
+    },
+    {
+      title: "电话",
+      items: [
+        { key: "phoneIncoming",        name: "主动来电", desc: "联系人每小时主动来电的概率" },
+        { key: "phoneHangup",          name: "呼出被挂断", desc: "拨出时对方直接挂断的概率" },
+        { key: "phoneCardMsg",         name: "挂断后字卡留言", desc: "呼出被挂断后附赠字卡留言的概率" },
+        { key: "phoneVoiceMsg",        name: "挂断后语音留言", desc: "呼出被挂断后附赠语音留言的概率" },
+        { key: "phoneMissedCard",      name: "未接后字卡留言", desc: "未接来电后附赠字卡留言的概率" },
+        { key: "phoneMissedVoice",     name: "未接后语音留言", desc: "未接来电后附赠语音留言的概率" },
+        { key: "phoneAutoRatio",       name: "留言用自动回复字卡", desc: "字卡留言中自动回复字卡占比" },
+        { key: "phoneEmojiAttach",     name: "留言附赠 emoji", desc: "字卡留言附赠 emoji 的概率" },
+        { key: "phoneConnectedHangup", name: "通话中对方挂断", desc: "通话中对方主动挂断的概率（每 20 分钟检查一次）" },
+        { key: "phoneGroupInvite1",    name: "群电话邀请 1 人", desc: "群成员发起通话时邀请 1 人的概率" },
+        { key: "phoneGroupInvite2",    name: "群电话邀请 2 人", desc: "群成员发起通话时邀请 2 人的概率" },
+        { key: "phoneGroupCall",       name: "群成员发起通话", desc: "每个群每小时抽取成员发起通话的概率" },
+        { key: "phoneNormal1",         name: "字卡留言发 1 条", desc: "普通字卡留言发送 1 条的概率" },
+        { key: "phoneNormal2",         name: "字卡留言发 2 条", desc: "普通字卡留言发送 2 条的概率" },
+        { key: "phoneVoice1",          name: "语音留言发 1 条", desc: "语音留言发送 1 条的概率" },
+        { key: "phoneVoice2",          name: "语音留言发 2 条", desc: "语音留言发送 2 条的概率" },
+        { key: "phoneEmoji2",          name: "附赠 2 个 emoji", desc: "字卡留言附赠 2 个 emoji 的概率" }
+      ]
+    }
   ];
 
   function buildSheet() {
@@ -117,24 +164,27 @@ window.MineProbs = (function () {
     load();
 
     var html = '<div class="card-hint">修改范围为 0~100%，点击加减号或直接输入数字，立即生效</div>';
-    html += '<div class="prob-list">' + ITEMS.map(function (it) {
-      var val = state[it.key];
-      return '<div class="prob-item">' +
-        '<div class="prob-head">' +
-          '<span class="prob-name">' + it.name + '</span>' +
-          '<span class="prob-value">' + val + '%</span>' +
-        '</div>' +
-        '<div class="prob-desc">' + it.desc + '</div>' +
-        '<div class="prob-ctl">' +
-          '<button class="prob-step" data-step="' + it.key + '" data-delta="-1" aria-label="减">' + I.svg("minus", 18) + '</button>' +
-          '<input type="number" class="prob-input" data-key="' + it.key + '" min="0" max="100" value="' + val + '">' +
-          '<span class="prob-unit">%</span>' +
-          '<button class="prob-step" data-step="' + it.key + '" data-delta="1" aria-label="加">' + I.svg("plus", 18) + '</button>' +
-          '<button class="prob-step" data-step="' + it.key + '" data-delta="-5" aria-label="减5">' + I.svg("minus", 18) + '5</button>' +
-          '<button class="prob-step" data-step="' + it.key + '" data-delta="5" aria-label="加5">' + I.svg("plus", 18) + '5</button>' +
-        '</div>' +
-      '</div>';
-    }).join("") + '</div>';
+    GROUPS.forEach(function (g) {
+      html += '<div class="prob-group-title">' + g.title + '</div>';
+      html += '<div class="prob-list">' + g.items.map(function (it) {
+        var val = state[it.key];
+        return '<div class="prob-item">' +
+          '<div class="prob-head">' +
+            '<span class="prob-name">' + it.name + '</span>' +
+            '<span class="prob-value">' + val + '%</span>' +
+          '</div>' +
+          '<div class="prob-desc">' + it.desc + '</div>' +
+          '<div class="prob-ctl">' +
+            '<button class="prob-step" data-step="' + it.key + '" data-delta="-1" aria-label="减">' + I.svg("minus", 18) + '</button>' +
+            '<input type="number" class="prob-input" data-key="' + it.key + '" min="0" max="100" step="any" value="' + val + '">' +
+            '<span class="prob-unit">%</span>' +
+            '<button class="prob-step" data-step="' + it.key + '" data-delta="1" aria-label="加">' + I.svg("plus", 18) + '</button>' +
+            '<button class="prob-step" data-step="' + it.key + '" data-delta="-5" aria-label="减5">' + I.svg("minus", 18) + '5</button>' +
+            '<button class="prob-step" data-step="' + it.key + '" data-delta="5" aria-label="加5">' + I.svg("plus", 18) + '5</button>' +
+          '</div>' +
+        '</div>';
+      }).join("") + '</div>';
+    });
 
     html += '<div style="padding:var(--sp-4) var(--sp-5);">' +
       '<button class="btn btn-block" data-act="reset-probs">' + I.svg("refresh", 16) + ' 恢复默认</button>' +
@@ -164,7 +214,7 @@ window.MineProbs = (function () {
     body.querySelectorAll(".prob-input").forEach(function (input) {
       var commit = function () {
         var key = input.getAttribute("data-key");
-        var v = parseInt(input.value, 10);
+        var v = parseFloat(input.value);
         if (isNaN(v)) { input.value = get(key); return; }
         set(key, v);
         input.value = get(key);
