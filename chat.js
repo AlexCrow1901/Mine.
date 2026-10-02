@@ -598,8 +598,36 @@ window.MineChat = (function () {
     if (C && C.loadData) C.loadData();
     loadMe();
     var c = C.findContact(contactId);
+    /* 兜底（历史数据迁移）：联系人 id 失效时，按最后一条消息的发送者姓名匹配 */
+    if (!c && C.findContactByName) {
+      load();
+      var _name = null;
+      try {
+        var _msgs = conversations["contact:" + contactId];
+        if (_msgs && _msgs.length) {
+          for (var _i = _msgs.length - 1; _i >= 0; _i--) {
+            if (_msgs[_i].senderName) { _name = _msgs[_i].senderName; break; }
+          }
+        }
+      } catch (e) {}
+      if (_name) c = C.findContactByName(_name);
+    }
     if (!c) return;
     load();
+    /* 重链：联系人实际 id 与存储键不一致时，把旧 id 的会话迁移到当前 id，
+       避免历史聊天记录因 id 失效而孤立、不可见 */
+    if (c.id !== contactId) {
+      try {
+        var _old = conversations["contact:" + contactId];
+        if (_old && _old.length) {
+          var _tgt = conversations["contact:" + c.id];
+          conversations["contact:" + c.id] = _tgt ? _tgt.concat(_old) : _old;
+          delete conversations["contact:" + contactId];
+          save();
+        }
+      } catch (e) {}
+      contactId = c.id;
+    }
     clearUnread("contact:" + contactId);
     ctx.type = "contact";
     ctx.id = contactId;
@@ -1290,10 +1318,19 @@ window.MineChat = (function () {
       var title, avatarHTML, type, id;
       if (key.indexOf("contact:") === 0) {
         var c = C.findContact(key.substring(8));
-        if (!c) return;
-        title = c.name;
-        avatarHTML = C.avatarHTML(c, 48, "conv-avatar");
-        type = "contact"; id = c.id;
+        var rawId = key.substring(8);
+        if (!c && C.findContactByName) c = C.findContactByName(lastMsg.senderName);
+        if (!c) {
+          /* 兜底：历史数据中联系人已不存在，用最后一条消息的发送者信息展示，保证记录不丢失 */
+          title = (lastMsg && lastMsg.senderName) ? lastMsg.senderName : "未知联系人";
+          avatarHTML = C.avatarHTML({ name: title, avatar: (lastMsg && lastMsg.senderAvatar) || null }, 48, "conv-avatar");
+          type = "contact"; id = rawId;
+        } else {
+          title = c.name;
+          avatarHTML = C.avatarHTML(c, 48, "conv-avatar");
+          /* id 不一致（按姓名兜底匹配到）时保留存储键的原 id，交给 openContact 重链 */
+          type = "contact"; id = (c.id === rawId) ? c.id : rawId;
+        }
       } else if (key.indexOf("group:") === 0) {
         var g = C.findGroup(key.substring(6));
         if (!g) return;
