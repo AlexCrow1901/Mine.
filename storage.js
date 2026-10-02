@@ -25,6 +25,12 @@
   var STORE = "kv";
   var META_KEY = "mine.storage.meta.v1";
 
+  /* 捕获原生 localStorage 引用（必须在覆盖 window.localStorage 之前）：
+     镜像写入必须走原生对象，否则会递归调用自定义 store 导致栈溢出，
+     原生镜像将永远写不进去。 */
+  var nativeLS = null;
+  try { nativeLS = window.localStorage; } catch (e) {}
+
   function openDB(cb) {
     var req;
     try { req = indexedDB.open(DB_NAME, DB_VER); }
@@ -41,9 +47,26 @@
   function dbGetAll(db, cb) {
     try {
       var tx = db.transaction(STORE, "readonly");
-      var req = tx.objectStore(STORE).getAll();
-      req.onsuccess = function () { cb(req.result || []); };
-      req.onerror = function () { cb([]); };
+      var store = tx.objectStore(STORE);
+      /* 修复：无 keyPath 的键值仓库 getAll() 只返回值、不含 key，
+         必须用 getAllKeys() + get() 还原出 {key, value} 对，
+         否则恢复循环里的 e.key 永远为空，IndexedDB 数据永远不会被读回。 */
+      var keysReq = store.getAllKeys();
+      keysReq.onsuccess = function () {
+        var keys = keysReq.result || [];
+        if (keys.length === 0) { cb([]); return; }
+        var entries = [];
+        var pending = keys.length;
+        keys.forEach(function (k) {
+          var getReq = store.get(k);
+          getReq.onsuccess = function () {
+            entries.push({ key: k, value: getReq.result });
+            if (--pending === 0) cb(entries);
+          };
+          getReq.onerror = function () { if (--pending === 0) cb(entries); };
+        });
+      };
+      keysReq.onerror = function () { cb([]); };
     } catch (e) { cb([]); }
   }
 
@@ -62,9 +85,10 @@
   var cache = {};
   var dirty = {};   // 本次会话写入过的键：恢复时优先保留内存中的新值
   try {
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (k != null) cache[k] = localStorage.getItem(k);
+    var seedSource = nativeLS || localStorage;
+    for (var i = 0; i < seedSource.length; i++) {
+      var k = seedSource.key(i);
+      if (k != null) cache[k] = seedSource.getItem(k);
     }
   } catch (e) {}
 
@@ -105,11 +129,14 @@
     if (document.visibilityState === "hidden") flushOnExit();
   });
 
-  /* ---- 原生 localStorage 镜像（尽力而为，配额不足静默交给 IndexedDB） ---- */
+  /* ---- 原生 localStorage 镜像（尽力而为，配额不足静默交给 IndexedDB） ----
+     注意：必须写 nativeLS（覆盖前的原生对象），不能用全局 localStorage——
+     此时它已被替换成自定义 store，直接调用会无限递归。 */
   function mirrorNative(key, value) {
+    if (!nativeLS) return;
     try {
-      if (value === null) localStorage.removeItem(key);
-      else localStorage.setItem(key, value);
+      if (value === null) nativeLS.removeItem(key);
+      else nativeLS.setItem(key, value);
     } catch (e) { /* 超配额：交给 IndexedDB 兜底 */ }
   }
 
