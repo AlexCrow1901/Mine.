@@ -516,7 +516,12 @@ window.MineKeepalive = (function () {
   function pageNotify(title, body, opts) {
     if (!notificationsSupported() || Notification.permission !== "granted") return false;
     try {
-      var o = { body: body || "", tag: "mine-notify", renotify: true, data: { convKey: (opts && opts.convKey) || null, kind: (opts && opts.kind) || "msg" } };
+      var o = {
+        body: body || "",
+        tag: (opts && opts.tag) || aggTag(opts && opts.convKey),
+        renotify: true,
+        data: { convKey: (opts && opts.convKey) || null, kind: (opts && opts.kind) || "msg" }
+      };
       if (opts && opts.image) o.icon = opts.image;
       if (opts && opts.vibrate) o.vibrate = opts.vibrate;
       var n = new Notification(title || "Mine", o);
@@ -552,7 +557,7 @@ window.MineKeepalive = (function () {
         items.forEach(function (it) {
           var o = {
             body: it.body || "",
-            tag: "mine-notify",
+            tag: (it.opts && it.opts.tag) || aggTag(it.opts && it.opts.convKey),
             renotify: true,
             data: { convKey: (it.opts && it.opts.convKey) || null, kind: (it.opts && it.opts.kind) || "msg" }
           };
@@ -583,7 +588,76 @@ window.MineKeepalive = (function () {
       }));
     } catch (e) {}
   }
-  /* 对外通知入口（去重闸 + 记账 + 通道选择） */
+  /* ==================== 微信式聚合通知 ====================
+     后台短时间内收到多条消息 → 合并为一条通知：
+     · 标题：会话名（N 条新消息）
+     · 正文：每条消息一行（最多 4 条，超出显示"共 N 条新消息"）
+     · 同会话使用相同 tag → 通知栏内自动替换为最新聚合，
+       不再出现"只看到最新一条消息"的问题 */
+  var AGG_DELAY = 1500;           // 合并窗口（ms）：窗口内到达的消息并入同一条
+  var AGG_MAX_SHOW = 4;           // 正文最多显示条数
+  var aggByConv = {};             // convKey -> 聚合缓冲
+  function aggTag(convKey) {
+    return "mine-" + (convKey || "all");
+  }
+  function enqueueAgg(title, body, opts) {
+    var convKey = opts.convKey || "_all";
+    var text = String(body || title || "")
+      .replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, "[图片]")
+      .trim().slice(0, 80);
+    if (!text) text = "(新消息)";
+    if (!aggByConv[convKey]) {
+      aggByConv[convKey] = {
+        title: title || "Mine",
+        convKey: opts.convKey || null,
+        kind: opts.kind || "msg",
+        image: opts.image || null,
+        vibrate: opts.vibrate || null,
+        items: [],
+        timer: null
+      };
+    }
+    var a = aggByConv[convKey];
+    a.items.push(text);
+    if (a.items.length > 10) a.items.shift();
+    /* 连续到达时重置计时器：消息流结束后 AGG_DELAY 再统一弹出 */
+    if (a.timer) clearTimeout(a.timer);
+    a.timer = setTimeout(function () { flushAgg(convKey); }, AGG_DELAY);
+  }
+  function flushAgg(convKey) {
+    var a = aggByConv[convKey];
+    if (!a) return;
+    delete aggByConv[convKey];
+    if (!a.items.length) return;
+    var n = a.items.length;
+    var show = a.items.slice(0, AGG_MAX_SHOW);
+    var body = show.join("\n");
+    var title = a.title;
+    if (n > 1) {
+      title = a.title + "（" + n + " 条新消息）";
+      if (n > AGG_MAX_SHOW) body += "\n… 共 " + n + " 条新消息";
+    }
+    var opts = {
+      convKey: a.convKey,
+      kind: a.kind,
+      image: a.image,
+      vibrate: a.vibrate,
+      tag: aggTag(a.convKey)          // 同会话同 tag：通知栏内替换为最新聚合
+    };
+    var r = swNotify(title, body, opts);
+    if (r === "no-sw") pageNotify(title, body, opts);
+    else if (r === "queued") {
+      // SW ready 超时兜底
+      setTimeout(function () {
+        if (!("serviceWorker" in navigator)) { flushSwQueueToPage(); return; }
+        try {
+          navigator.serviceWorker.ready.then(function () {}, function () { flushSwQueueToPage(); });
+        } catch (e) { flushSwQueueToPage(); }
+      }, SW_QUEUE_TTL);
+    }
+  }
+  /* 对外通知入口（聚合 + 记账 + 通道选择）
+     后台多条消息先入聚合缓冲，延迟合并为一条微信式通知 */
   function notify(title, body, opts) {
     if (!prefs.notify) return;
     if (!notificationsSupported()) return;
@@ -605,21 +679,8 @@ window.MineKeepalive = (function () {
     }
     // 入 PSYNC 快照：页面全关后 SW 也能补发提醒（学习 mochi 方案）
     pushPsyncSnapshot(title, body, opts.convKey);
-    // 通道：SW 优先，页面兜底
-    var r = swNotify(title, body, opts);
-    if (r === "no-sw" || r === "queued") {
-      // SW 不可用 → 立即页面弹；queued 时若 60s 内 SW 一直未就绪 → 页面兜底
-      if (r === "no-sw") pageNotify(title, body, opts);
-      else {
-        // SW ready 超时兜底
-        setTimeout(function () {
-          if (!("serviceWorker" in navigator)) { flushSwQueueToPage(); return; }
-          try {
-            navigator.serviceWorker.ready.then(function () {}, function () { flushSwQueueToPage(); });
-          } catch (e) { flushSwQueueToPage(); }
-        }, SW_QUEUE_TTL);
-      }
-    }
+    // 聚合缓冲 → 延迟合并弹出
+    enqueueAgg(title, body, opts);
   }
 
   /* ==================== Wake Lock 屏幕常亮（前台辅助） ==================== */
