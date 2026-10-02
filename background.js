@@ -33,10 +33,8 @@ window.MineBackground = (function () {
     preset: "none",             // 默认"雾境"：无背景图，跨浏览器统一浅色简约观感
     customUrl: null,            // 自定义图（dataURL 或 objectURL）
     customType: "image",
-    fogTint: 0.34,
-    blur: 0,                    // 背景图自身模糊 px
-    noise: 0.12,
-    fontColor: "white"          // 主界面字体颜色：white | black
+    fontStyle: "default",       // 字体样式：default | rounded | songti | kai | mono
+    fontColor: "black"          // 主界面字体颜色：white | black | cream | azure | sage
   };
 
   var el = {};              // 背景层 DOM
@@ -48,10 +46,8 @@ window.MineBackground = (function () {
     try {
       var data = {
         preset: state.preset,
-        fogTint: state.fogTint,
-        blur: state.blur,
-        noise: state.noise,
         customUrl: state.customUrl,
+        fontStyle: state.fontStyle,
         fontColor: state.fontColor
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -66,25 +62,15 @@ window.MineBackground = (function () {
       var data = JSON.parse(raw);
       /* 预设合法性校验：历史版本可能存了已移除的图片预设（london/forest），回退为"雾境" */
       state.preset = (data.preset && presetById(data.preset)) ? data.preset : "none";
-      state.fogTint = (typeof data.fogTint === "number") ? data.fogTint : state.fogTint;
-      state.blur = (typeof data.blur === "number") ? data.blur : state.blur;
-      state.noise = (typeof data.noise === "number") ? data.noise : state.noise;
       state.customUrl = data.customUrl || null;
-      state.fontColor = data.fontColor || "white";
+      state.fontStyle = (data.fontStyle && FONT_STYLES[data.fontStyle]) ? data.fontStyle : "default";
+      state.fontColor = (data.fontColor && FONT_COLORS[data.fontColor]) ? data.fontColor : "black";
     } catch (e) {}
   }
 
   /* ---------- 应用到背景层 ---------- */
   function apply() {
-    var bg = el.image, tint = el.fogTint, noise = el.noise;
-
-    // 噪点
-    if (noise) noise.style.opacity = state.noise;
-
-    // 雾色叠加：仅在非"雾境"时显示
-    var showTint = state.preset !== "none";
-    tint.style.opacity = showTint ? "1" : "0";
-    document.documentElement.style.setProperty("--fog-tint", state.fogTint);
+    var bg = el.image;
 
     // 背景图 / 渐变
     var p = presetById(state.preset);
@@ -93,20 +79,16 @@ window.MineBackground = (function () {
             : (p && p.type === "gradient") ? p.value : null;
 
     if (url) {
-      bg.style.backgroundImage = "url('" + url + "')";
       if (p && p.type === "gradient") {
-        // 渐变预设直接作为背景图
         bg.style.backgroundImage = p.value;
         bg.classList.remove("is-img");
       } else {
+        bg.style.backgroundImage = "url('" + url + "')";
         bg.classList.add("is-img");
       }
       bg.classList.add("is-active");
-      // 模糊：放大避免边缘透出
-      bg.style.filter = state.blur > 0
-        ? "blur(" + state.blur + "px)"
-        : "none";
-      bg.style.transform = state.blur > 0 ? "scale(1.12)" : "scale(1)";
+      bg.style.filter = "none";
+      bg.style.transform = "scale(1)";
     } else {
       bg.classList.remove("is-active");
       bg.style.backgroundImage = "none";
@@ -115,6 +97,7 @@ window.MineBackground = (function () {
     save();
     syncManagerUI();
     applyFontColor();
+    applyFontStyle();
   }
 
   function presetById(id) {
@@ -127,31 +110,68 @@ window.MineBackground = (function () {
     state.preset = id;
     apply();
   }
-  function setFogTint(v) { state.fogTint = v; apply(); }
-  function setBlur(v) { state.blur = v; apply(); }
-  function setNoise(v) { state.noise = v; apply(); }
 
-  /* ---------- 主界面字体颜色（黑/白） ----------
+  /* ---------- 字体样式（通过覆盖 --font-base 全局生效） ---------- */
+  var FONT_STYLES = {
+    default: { name: "默认", char: "默", css: "" },
+    rounded: { name: "圆体", char: "圆",
+      css: "'Yuanti SC','YouYuan','PingFang SC','Microsoft YaHei',system-ui,sans-serif" },
+    songti:  { name: "宋体", char: "宋",
+      css: "'Songti SC','SimSun','宋体',serif" },
+    kai:     { name: "楷体", char: "楷",
+      css: "'Kaiti SC','KaiTi','楷体',serif" },
+    mono:    { name: "等宽", char: "码",
+      css: "'SF Mono','Consolas','Menlo',monospace" }
+  };
+  function applyFontStyle() {
+    var root = document.documentElement;
+    var css = FONT_STYLES[state.fontStyle] ? FONT_STYLES[state.fontStyle].css : "";
+    if (css) root.style.setProperty("--font-base", css);
+    else root.style.removeProperty("--font-base");
+  }
+  function setFontStyle(style) {
+    if (!FONT_STYLES[style]) return;
+    state.fontStyle = style;
+    applyFontStyle();
+    save();
+    syncManagerUI();
+  }
+
+  /* ---------- 主界面字体颜色 ----------
      通过覆盖 :root 的 CSS 变量实现全局字体颜色切换。
      其他界面（陪伴、朋友圈等）自动继承。 */
   var FONT_COLORS = {
-    white: {
+    white: { name: "白色",
       "--t-primary":   "#dde3e6",
       "--t-secondary": "#aab1b6",
       "--t-tertiary":  "#71787d",
-      "--t-faint":     "#565c61"
-    },
-    black: {
+      "--t-faint":     "#565c61" },
+    black: { name: "黑色",
       "--t-primary":   "#1a1a1a",
       "--t-secondary": "#3a3a3a",
       "--t-tertiary":  "#6a6a6a",
-      "--t-faint":     "#9a9a9a"
-    }
+      "--t-faint":     "#9a9a9a" },
+    cream: { name: "米白",
+      "--t-primary":   "#efe9dc",
+      "--t-secondary": "#c9bfa8",
+      "--t-tertiary":  "#9c917c",
+      "--t-faint":     "#7a7160" },
+    azure: { name: "浅蓝",
+      "--t-primary":   "#d6e4ee",
+      "--t-secondary": "#a9c2d4",
+      "--t-tertiary":  "#7d97ab",
+      "--t-faint":     "#647c8e" },
+    sage:  { name: "浅绿",
+      "--t-primary":   "#dde8d8",
+      "--t-secondary": "#b3c9ab",
+      "--t-tertiary":  "#8ba383",
+      "--t-faint":     "#718a6a" }
   };
   function applyFontColor() {
-    var vars = FONT_COLORS[state.fontColor] || FONT_COLORS.white;
+    var vars = FONT_COLORS[state.fontColor] || FONT_COLORS.black;
     var root = document.documentElement;
     Object.keys(vars).forEach(function (k) {
+      if (k === "name") return;
       root.style.setProperty(k, vars[k]);
     });
   }
@@ -239,24 +259,33 @@ window.MineBackground = (function () {
           window.MineIcons.svg("trash", 18) + ' 清除自定义</button>'
         : '');
 
-    // 调节滑块
-    var slidersHtml =
-      '<div class="section-label">氛围调节</div>' +
-      sliderRow("fogTint", "雾色叠加", state.fogTint, 0, 0.8, 0.01) +
-      sliderRow("blur", "背景模糊", state.blur, 0, 20, 1) +
-      sliderRow("noise", "雾霭噪点", state.noise, 0, 0.25, 0.01);
+    // 字体样式
+    var fontStyleHtml =
+      '<div class="section-label">字体样式</div>' +
+      '<div class="font-color-row">' +
+        Object.keys(FONT_STYLES).map(function (key) {
+          var fs = FONT_STYLES[key];
+          return '<button class="font-color-btn' + (state.fontStyle === key ? " is-active" : "") +
+            '" data-font-style="' + key + '">' +
+            '<span class="fc-swatch font-style-swatch" style="font-family:' + (fs.css || "sans-serif") + ';">' + fs.char + '</span>' +
+            '<span>' + fs.name + '</span></button>';
+        }).join("") +
+      '</div>';
 
     // 字体颜色
     var fontColorHtml =
       '<div class="section-label">字体颜色</div>' +
       '<div class="font-color-row">' +
-        '<button class="font-color-btn' + (state.fontColor === "white" ? " is-active" : "") + '" data-font-color="white">' +
-          '<span class="fc-swatch fc-white"></span><span>白色</span></button>' +
-        '<button class="font-color-btn' + (state.fontColor === "black" ? " is-active" : "") + '" data-font-color="black">' +
-          '<span class="fc-swatch fc-black"></span><span>黑色</span></button>' +
+        Object.keys(FONT_COLORS).map(function (key) {
+          var fc = FONT_COLORS[key];
+          if (key === "name") return "";
+          return '<button class="font-color-btn' + (state.fontColor === key ? " is-active" : "") +
+            '" data-font-color="' + key + '">' +
+            '<span class="fc-swatch fc-' + key + '"></span><span>' + fc.name + '</span></button>';
+        }).join("") +
       '</div>';
 
-    body.innerHTML = presetsHtml + uploadHtml + slidersHtml + fontColorHtml;
+    body.innerHTML = presetsHtml + uploadHtml + fontStyleHtml + fontColorHtml;
 
     // 绑定事件
     body.querySelectorAll("[data-preset]").forEach(function (btn) {
@@ -275,35 +304,19 @@ window.MineBackground = (function () {
     var clearBtn = body.querySelector('[data-act="clear"]');
     if (clearBtn) clearBtn.addEventListener("click", clearCustom);
 
+    // 字体样式按钮
+    body.querySelectorAll("[data-font-style]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setFontStyle(btn.getAttribute("data-font-style"));
+      });
+    });
+
     // 字体颜色按钮
     body.querySelectorAll("[data-font-color]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         setFontColor(btn.getAttribute("data-font-color"));
       });
     });
-
-    body.querySelectorAll("input.slider").forEach(function (input) {
-      input.addEventListener("input", function () {
-        var key = this.getAttribute("data-key");
-        var v = parseFloat(this.value);
-        if (key === "fogTint") setFogTint(v);
-        else if (key === "blur") setBlur(v);
-        else if (key === "noise") setNoise(v);
-        var valEl = this.closest(".slider-block").querySelector(".slider-val");
-        if (valEl) valEl.textContent = Math.round(v * (key === "blur" ? 1 : 100)) + (key === "blur" ? "px" : "%");
-      });
-    });
-  }
-
-  function sliderRow(key, name, val, min, max, step) {
-    var display = key === "blur"
-      ? Math.round(val) + "px"
-      : Math.round(val * 100) + "%";
-    return '<div class="slider-block">' +
-      '<div class="slider-row"><span class="slider-name">' + name + '</span>' +
-      '<span class="slider-val">' + display + '</span></div>' +
-      '<input type="range" class="slider" data-key="' + key + '" min="' + min +
-      '" max="' + max + '" step="' + step + '" value="' + val + '"></div>';
   }
 
   function syncManagerUI() {
@@ -316,6 +329,12 @@ window.MineBackground = (function () {
     body.querySelectorAll("[data-preset]").forEach(function (btn) {
       var id = btn.getAttribute("data-preset");
       btn.classList.toggle("is-active", id === state.preset);
+    });
+
+    // 更新字体样式选中态
+    body.querySelectorAll("[data-font-style]").forEach(function (btn) {
+      var fs = btn.getAttribute("data-font-style");
+      btn.classList.toggle("is-active", fs === state.fontStyle);
     });
 
     // 更新字体颜色选中态
@@ -350,11 +369,10 @@ window.MineBackground = (function () {
   /* ---------- 初始化 ---------- */
   function init() {
     el.image = document.querySelector(".bg-image");
-    el.fogTint = document.querySelector(".bg-fog-tint");
-    el.noise = document.querySelector(".bg-noise");
     load();
     apply();
     applyFontColor();
+    applyFontStyle();
   }
 
   return {
@@ -363,11 +381,10 @@ window.MineBackground = (function () {
     closeManager: closeManager,
     setPreset: setPreset,
     upload: upload,
-    setFogTint: setFogTint,
-    setBlur: setBlur,
-    setNoise: setNoise,
+    setFontStyle: setFontStyle,
     setFontColor: setFontColor,
     applyFontColor: applyFontColor,
+    applyFontStyle: applyFontStyle,
     getState: function () { return Object.assign({}, state); }
   };
 })();
