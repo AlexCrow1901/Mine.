@@ -47,7 +47,7 @@ var CORE_ASSETS = [
   "utils.js?v8",
   "notify.js?v1",
   "keepalive.js?v6",
-  "settings.js?v8",
+  "settings.js?v9",
   "icons.js?v16",
   "background.js?v9",
   "contacts.js?v20",
@@ -103,12 +103,81 @@ self.addEventListener("message", function (e) {
   }
 });
 
+/* ---------------- 自定义桌面图标代理 ----------------
+   用户网站内上传的图标存在同源 IndexedDB（mine-icon 库），SW 拦截
+   icons/ 请求并返回自定义图 → manifest 保持静态可安装，但 Chrome
+   拉取图标/同步已安装应用时拿到的都是自定义图标。无自定义则回退。 */
+var CUSTOM_ICON_DB = "mine-icon";
+var CUSTOM_ICON_KEY = "mine.icon.custom.v1";
+function customIconIdbGet() {
+  return new Promise(function (resolve) {
+    try {
+      var req = indexedDB.open(CUSTOM_ICON_DB, 1);
+      req.onupgradeneeded = function () {
+        try {
+          if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+        } catch (e) {}
+      };
+      req.onsuccess = function () {
+        var db = req.result;
+        try {
+          var tx = db.transaction("kv", "readonly");
+          var rq = tx.objectStore("kv").get(CUSTOM_ICON_KEY);
+          rq.onsuccess = function () { try { db.close(); } catch (e2) {} resolve(rq.result || null); };
+          rq.onerror = function () { try { db.close(); } catch (e2) {} resolve(null); };
+        } catch (e) { try { db.close(); } catch (e2) {} resolve(null); }
+      };
+      req.onerror = function () { resolve(null); };
+    } catch (e) { resolve(null); }
+  });
+}
+function customIconToBlob(dataUrl) {
+  try {
+    var parts = String(dataUrl || "").split(",");
+    if (parts.length < 2 || !parts[0] || parts[0].indexOf("base64") < 0) return null;
+    var bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: "image/png" });
+  } catch (e) { return null; }
+}
+function iconFallbackFetch(e) {
+  return fetch(e.request).then(function (res) {
+    if (res && res.ok && e.request.url.indexOf(self.location.origin) === 0) {
+      var copy = res.clone();
+      caches.open(CACHE_NAME).then(function (c) {
+        try { c.put(e.request, copy); } catch (err) {}
+      });
+    }
+    return res;
+  }).catch(function () {
+    return caches.match(e.request).then(function (hit) {
+      if (hit) return hit;
+      return caches.match(e.request.url.split("?")[0]);
+    });
+  });
+}
 /* ---------------- 请求：网络优先，超时/失败回退缓存 ----------------
    version.json / notice.json 不拦截，保证版本检测真实 */
 self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
   var url = e.request.url;
   if (url.indexOf("version.json") >= 0 || url.indexOf("notice.json") >= 0) return;
+  /* 图标代理：icons/ 下 PNG 命中自定义图标则返回，否则回退 */
+  if (url.indexOf("/icons/") >= 0 && /\.png(\?|$)/.test(url)) {
+    e.respondWith(
+      customIconIdbGet().then(function (dataUrl) {
+        if (dataUrl) {
+          var blob = customIconToBlob(dataUrl);
+          if (blob) return new Response(blob, {
+            headers: { "Content-Type": "image/png", "Cache-Control": "no-store" }
+          });
+        }
+        return iconFallbackFetch(e);
+      })
+    );
+    return;
+  }
   e.respondWith(
     fetch(e.request).then(function (res) {
       // 同源 GET 成功 → 写缓存（stale-while-revalidate 风格）
