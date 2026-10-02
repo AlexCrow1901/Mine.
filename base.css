@@ -103,19 +103,11 @@ button, input { font-family: inherit; color: inherit; }
 }
 
 @media (min-width: 480px) {
-  /* 桌面端：两侧留出雾化空间，强化沉浸感 */
+  /* 桌面/宽视口：保持手机 App 卡片观感，柔和投影 + 极淡边框，不再叠加深色暗角 */
   .app-shell {
     height: 100%;
     box-shadow: var(--sh-diffuse);
-  }
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    background: radial-gradient(80% 60% at 50% 50%,
-      transparent 40%, rgba(0,0,0,0.25) 100%);
-    pointer-events: none;
+    border: 1px solid var(--bd-soft);
   }
 }
 
