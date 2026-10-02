@@ -6,9 +6,12 @@
    · 系统字卡：系统预置 / 用户自建，所有联系人均可使用（独立发送概率）
    · 字卡类型：字符 / emoji / 图片 / 语音，每一栏一种类型，点击栏头折叠/展开
    · 数据存储于 localStorage "mine.cards.v1"：
-       { public: [card...], per: { cid: [card...] }, sys: [card...] }
+       { public: [card...], per: { cid: [card...] }, autoPer: { cid: [card...] }, sys: [card...] }
+       · public / per / sys：普通回复字卡池
+       · autoPer：单独"自动回复"字卡（仅触发自动回复时使用）
    · 聊天回复逻辑（chat.js）：getReplyPool(contactId) 返回 单独+公用 字卡池，
-     系统字卡通过 getSysCards() 单独读取并按"系统字卡发送概率"抽取。
+     系统字卡通过 getSysCards() 单独读取并按"系统字卡发送概率"抽取，
+     自动回复场景通过 getAutoCards(contactId) 优先读取单独自动回复字卡。
    ======================================================================== */
 
 window.MineCards = (function () {
@@ -19,8 +22,8 @@ window.MineCards = (function () {
   var C = window.MineContacts;
   var STORE_KEY = "mine.cards.v1";
 
-  var state = { public: [], per: {}, sys: [] };
-  var expandedTypes = { text: true, emoji: true, image: true, audio: false };  // 类型栏折叠状态
+  var state = { public: [], per: {}, autoPer: {}, sys: [] };
+  var expandedTypes = { text: true, emoji: true, image: true, audio: false, auto: false };  // 类型栏折叠状态
 
   /* ==================== 字卡类型判断（与 chat.js 保持同一套规则） ==================== */
   function isImageCard(card) {
@@ -56,11 +59,13 @@ window.MineCards = (function () {
         state.public = Array.isArray(d.public) ? d.public : [];
         state.per = (d.per && typeof d.per === "object") ? d.per : {};
         state.sys = Array.isArray(d.sys) ? d.sys : [];
+        state.autoPer = (d.autoPer && typeof d.autoPer === "object") ? d.autoPer : {};
       }
     } catch (e) {}
     if (!Array.isArray(state.public)) state.public = [];
     if (!state.per || typeof state.per !== "object") state.per = {};
     if (!Array.isArray(state.sys)) state.sys = [];
+    if (!state.autoPer || typeof state.autoPer !== "object") state.autoPer = {};
   }
 
   /* ==================== 数据读写 ==================== */
@@ -108,6 +113,26 @@ window.MineCards = (function () {
   function removeSysCard(idx) {
     if (idx < 0 || idx >= state.sys.length) return false;
     state.sys.splice(idx, 1);
+    save();
+    return true;
+  }
+  /* 单独字卡：自动回复字卡（仅自动回复场景使用） */
+  function getAutoCards(cid) {
+    if (!cid || !state.autoPer[cid]) return [];
+    return state.autoPer[cid].slice();
+  }
+  function addAutoCard(cid, card) {
+    var v = String(card || "").trim();
+    if (!v || !cid) return false;
+    if (!state.autoPer[cid]) state.autoPer[cid] = [];
+    state.autoPer[cid].push(v);
+    save();
+    return true;
+  }
+  function removeAutoCard(cid, idx) {
+    if (!cid || !state.autoPer[cid]) return false;
+    if (idx < 0 || idx >= state.autoPer[cid].length) return false;
+    state.autoPer[cid].splice(idx, 1);
     save();
     return true;
   }
@@ -248,7 +273,8 @@ window.MineCards = (function () {
   }
 
   /* ---- 类型分栏编辑器：每一栏一种字卡类型，点击栏头折叠/展开
-       includeAudio=true 时额外显示语音栏（单独字卡） ---- */
+       includeAudio=true 时额外显示语音栏（单独字卡）
+       单独字卡（scope=per 且有 cid）额外显示"自动回复"栏（仅自动回复场景使用） ---- */
   function renderCardEditor(list, scope, cid, includeAudio) {
     var groups = [
       { type: "text",  name: "字符", icon: "feather", items: [] },
@@ -257,6 +283,13 @@ window.MineCards = (function () {
     ];
     if (includeAudio) {
       groups.push({ type: "audio", name: "语音", icon: "mic", items: [] });
+    }
+    /* 单独字卡：自动回复栏（与字符、emoji 等并列） */
+    if (scope === "per" && cid) {
+      var autoList = (state.autoPer[cid] || []).map(function (card, i) {
+        return { card: card, idx: i };
+      });
+      groups.push({ type: "auto", name: "自动回复", icon: "feather", items: autoList });
     }
     (list || []).forEach(function (card, i) {
       var entry = { card: card, idx: i };
@@ -271,6 +304,13 @@ window.MineCards = (function () {
 
     return '<div class="card-editor">' + groups.map(function (g) {
       var expanded = expandedTypes[g.type] !== false;
+      var bodyHtml;
+      if (g.type === "auto") {
+        bodyHtml = renderAutoSection(g.items, cid);
+      } else {
+        bodyHtml = renderTypeItems(g.items, scope, cid, g.type) +
+          renderTypeAddRow(g.type, scope, cid);
+      }
       return '<div class="card-type-section">' +
         '<button class="card-type-head" data-fold="' + g.type + '">' +
           '<span class="card-type-icon">' + I.svg(g.icon, 18) + '</span>' +
@@ -279,13 +319,29 @@ window.MineCards = (function () {
           '<span class="card-type-arrow' + (expanded ? " is-open" : "") + '">' + I.svg("back", 16) + '</span>' +
         '</button>' +
         (expanded
-          ? '<div class="card-type-body">' +
-              renderTypeItems(g.items, scope, cid, g.type) +
-              renderTypeAddRow(g.type, scope, cid) +
-            '</div>'
+          ? '<div class="card-type-body">' + bodyHtml + '</div>'
           : '') +
         '</div>';
     }).join("") + '</div>';
+  }
+
+  /* ---- 自动回复栏内容：列表 + 字符输入 + 图片 / 语音选择 ---- */
+  function renderAutoSection(items, cid) {
+    return renderTypeItems(items, "auto", cid, "auto") + renderAutoAddRow(cid);
+  }
+  function renderAutoAddRow(cid) {
+    return '<div class="card-add-row">' +
+      '<input type="text" class="card-input" id="card-input-auto" ' +
+        'placeholder="输入自动回复内容或 emoji，如：我在忙，稍后回你" maxlength="60">' +
+      '<button class="card-add-btn" data-add-scope="auto" data-add-cid="' + (cid || "") + '" ' +
+        'data-add-type="text" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
+      '</div>' +
+      '<div class="card-add-row">' +
+        '<button class="card-image-add-btn" data-add-scope="auto" data-add-cid="' + (cid || "") + '" ' +
+          'data-add-type="image">' + I.svg("image", 18) + ' 选择图片</button>' +
+        '<button class="card-image-add-btn" data-add-scope="auto" data-add-cid="' + (cid || "") + '" ' +
+          'data-add-type="audio">' + I.svg("mic", 18) + ' 选择语音</button>' +
+      '</div>';
   }
 
   /* ---- 某类型下的字卡项列表（items: [{card, idx}]，idx 为存储数组真实索引） ---- */
@@ -294,7 +350,8 @@ window.MineCards = (function () {
       var emptyText =
         type === "text" ? "暂无字符字卡" :
         (type === "emoji" ? "暂无 emoji 字卡" :
-        (type === "image" ? "暂无图片字卡" : "暂无语音字卡"));
+        (type === "image" ? "暂无图片字卡" :
+        (type === "auto" ? "暂无自动回复字卡" : "暂无语音字卡")));
       return '<div class="cards-empty">' + emptyText + '</div>';
     }
     return '<div class="card-list">' + items.map(function (entry) {
@@ -389,6 +446,7 @@ window.MineCards = (function () {
         if (scope === "public") removePublicCard(idx);
         else if (scope === "per") removePerCard(cid, idx);
         else if (scope === "sys") removeSysCard(idx);
+        else if (scope === "auto") removeAutoCard(cid, idx);
         render();
       });
     });
@@ -399,11 +457,14 @@ window.MineCards = (function () {
         var scope = btn.getAttribute("data-add-scope");
         var cid = btn.getAttribute("data-add-cid") || null;
         var type = btn.getAttribute("data-add-type");
-        var input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
+        var input;
+        if (scope === "auto") input = body.querySelector("#card-input-auto");
+        else input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
         var v = input ? input.value : "";
         if (!v) { showToast("请输入字卡内容"); return; }
         var ok = (scope === "public") ? addPublicCard(v)
                : (scope === "sys") ? addSysCard(v)
+               : (scope === "auto") ? addAutoCard(cid, v)
                : addPerCard(cid, v);
         if (ok && input) input.value = "";
         render();
@@ -439,6 +500,7 @@ window.MineCards = (function () {
                   if (!dataURL) return;
                   if (scope === "public") addPublicCard(dataURL);
                   else if (scope === "sys") addSysCard(dataURL);
+                  else if (scope === "auto") addAutoCard(cid, dataURL);
                   else if (scope === "per" && cid) addPerCard(cid, dataURL);
                   render();
                 };
@@ -450,6 +512,7 @@ window.MineCards = (function () {
                     if (!dataURL) return;
                     if (scope === "public") addPublicCard(dataURL);
                     else if (scope === "sys") addSysCard(dataURL);
+                    else if (scope === "auto") addAutoCard(cid, dataURL);
                     else if (scope === "per" && cid) addPerCard(cid, dataURL);
                     render();
                   });
@@ -504,12 +567,15 @@ window.MineCards = (function () {
     getPublicCards: getPublicCards,
     getPerCards: getPerCards,
     getSysCards: getSysCards,
+    getAutoCards: getAutoCards,
     getReplyPool: getReplyPool,
     hasAnyCards: hasAnyCards,
     addPublicCard: addPublicCard,
     removePublicCard: removePublicCard,
     addSysCard: addSysCard,
     removeSysCard: removeSysCard,
+    addAutoCard: addAutoCard,
+    removeAutoCard: removeAutoCard,
     addPerCard: addPerCard,
     removePerCard: removePerCard,
     isImageCard: isImageCard,

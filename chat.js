@@ -647,21 +647,39 @@ window.MineChat = (function () {
     if (group && group.cards) pool = pool.concat(group.cards);
     return pickCardWithImageChance(pool);
   }
+  /** 读取单独"自动回复"字卡（仅自动回复场景使用） */
+  function autoCardPool(contactId) {
+    if (!window.MineCards || !window.MineCards.getAutoCards) return [];
+    return window.MineCards.getAutoCards(contactId || null);
+  }
   /** 从联系人的自动回复字卡中随机抽取一条
-      （我的单独字卡 + 我的公用字卡 + 联系人自带 autoCards） */
+      优先使用单独"自动回复"字卡（+ 联系人自带 autoCards）；
+      未设置时回退原行为（单独字卡 + 公用字卡 + autoCards） */
   function pickRandomAutoCard(contact) {
     if (!contact) return null;
-    var pool = mineCardPool(contact.id);
+    var pool = autoCardPool(contact.id);
+    if (pool.length > 0) {
+      if (contact.autoCards && contact.autoCards.length) pool = pool.concat(contact.autoCards);
+      return pickCardWithImageChance(pool);
+    }
+    pool = mineCardPool(contact.id);
     if (contact.autoCards && contact.autoCards.length) pool = pool.concat(contact.autoCards);
     if (pool.length === 0) return null;
     return pickCardWithImageChance(pool);
   }
-  /** 群聊中合并个人自动回复字卡 + 群自动回复字卡后随机抽取
-      （我的单独字卡 + 我的公用字卡 + 个人 autoCards + 群 autoCards） */
+  /** 群聊中合并自动回复字卡后随机抽取
+      （单独"自动回复"字卡 + 个人/群 autoCards；未设置时回退单独+公用+autoCards） */
   function pickRandomAutoCardForGroup(contact, group) {
-    var pool = mineCardPool(contact ? contact.id : null);
+    var pool = autoCardPool(contact ? contact.id : null);
+    if (pool.length > 0) {
+      if (contact && contact.autoCards) pool = pool.concat(contact.autoCards);
+      if (group && group.autoCards) pool = pool.concat(group.autoCards);
+      return pickCardWithImageChance(pool);
+    }
+    pool = mineCardPool(contact ? contact.id : null);
     if (contact && contact.autoCards) pool = pool.concat(contact.autoCards);
     if (group && group.autoCards) pool = pool.concat(group.autoCards);
+    if (pool.length === 0) return null;
     return pickCardWithImageChance(pool);
   }
   /**
