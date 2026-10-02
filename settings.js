@@ -26,65 +26,52 @@ window.MineSettings = (function () {
   var ICON_KEY = "mine.icon.v1";
   var prefs = { notify: true, background: true, nodedup: false, noduck: true };
 
-  /* ============ 应用图标自定义（PWA 桌面图标） ============ */
+  /* ============ 应用图标自定义（PWA 桌面图标） ============
+     为保证应用可安装为独立 App（Chrome 只认可静态 manifest.json 上的图标，
+     动态 blob manifest 会导致无法安装），自定义桌面图标采用"导出替换"方案：
+     上传 → 应用内预览 + 导出 PNG → 用导出的文件替换仓库 icons/ 下同名文件
+     并重新部署 → 重新"添加到主屏幕"后桌面图标即更新。
+     上传的自定义图标仅存本地用于预览，不修改 manifest。 */
   function getCustomIcon() {
     try { return localStorage.getItem(ICON_KEY) || null; } catch (e) { return null; }
   }
-  /* 动态重建 manifest：自定义图标（dataURL）插入 icons 首位；
-     apple-touch-icon（iOS）/ favicon 同步切换 */
-  function rebuildManifest(customIcon) {
-    var icons = [
-      { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "icons/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-      { src: "icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
-    ];
-    if (customIcon) icons.unshift({ src: customIcon, sizes: "512x512", type: "image/png", purpose: "any" });
-    var manifest = {
-      name: "Mine · 雾客",
-      short_name: "Mine",
-      description: "雾客 Lunar Wanderer — 聊天、通讯录、陪伴、朋友圈一体化本地生活应用，支持离线使用与系统通知。",
-      lang: "zh-CN",
-      start_url: "./index.html",
-      scope: "./",
-      display: "standalone",
-      orientation: "portrait",
-      background_color: "#F8F4EF",
-      theme_color: "#F8F4EF",
-      icons: icons
+  /* dataURL → 按目标尺寸重绘为 PNG 并触发下载 */
+  function downloadPng(dataUrl, filename, size) {
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement("canvas");
+        c.width = size; c.height = size;
+        var ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, size, size);
+        var a = document.createElement("a");
+        a.href = c.toDataURL("image/png");
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (e) {}
     };
-    try {
-      var blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
-      var url = URL.createObjectURL(blob);
-      var link = document.querySelector('link[rel="manifest"]');
-      if (link) link.href = url;
-      var ati = document.querySelector('link[rel="apple-touch-icon"]');
-      if (ati) ati.href = customIcon || "icons/icon-192.png";
-      var fav = document.querySelector('link[rel="icon"]');
-      if (fav) fav.href = customIcon || "icons/icon-192.png";
-    } catch (e) {}
+    img.src = dataUrl;
   }
-  /* 页面加载即应用自定义图标（Blob URL 每次加载需重建） */
-  (function initIcon() {
-    var c = getCustomIcon();
-    if (c) rebuildManifest(c);
-  })();
-  /* 上传图片 → 压缩为 512px dataURL → 持久化 + 重建 manifest */
+  function downloadCustomIcon(size) {
+    var data = getCustomIcon();
+    if (!data) return;
+    downloadPng(data, size === 512 ? "icon-512.png" : "icon-192.png", size);
+  }
+  /* 上传图片 → 压缩为 512px dataURL → 仅本地存储与预览 */
   function applyCustomIcon(file) {
     if (!file || !/^image\//.test(file.type)) return;
     if (window.MineUtils && MineUtils.compressImage) {
       MineUtils.compressImage(file, 512, 0.9, function (dataURL) {
         if (!dataURL) return;
         try { localStorage.setItem(ICON_KEY, dataURL); } catch (e) {}
-        rebuildManifest(dataURL);
         renderPage();
       });
     } else {
       var reader = new FileReader();
       reader.onload = function () {
-        var dataURL = reader.result;
-        try { localStorage.setItem(ICON_KEY, dataURL); } catch (e) {}
-        rebuildManifest(dataURL);
+        try { localStorage.setItem(ICON_KEY, reader.result); } catch (e) {}
         renderPage();
       };
       reader.readAsDataURL(file);
@@ -92,7 +79,6 @@ window.MineSettings = (function () {
   }
   function resetCustomIcon() {
     try { localStorage.removeItem(ICON_KEY); } catch (e) {}
-    rebuildManifest(null);
     renderPage();
   }
   /* ---------------- 持久化 ---------------- */
@@ -166,7 +152,7 @@ window.MineSettings = (function () {
     // 应用图标自定义
     html += '<div class="group-head">应用图标</div>';
     html += iconCard();
-    html += '<div class="card-hint">修改后需重新"添加到主屏幕 / 安装应用"才会更新桌面图标；建议上传正方形图片，系统会自动适配圆角与遮罩。</div>';
+    html += '<div class="card-hint">自定义桌面图标：上传图片 → 导出 PNG → 替换仓库 icons/icon-512.png（与 icon-192.png）→ 重新部署 → 重新"添加到主屏幕"后生效。为保证可安装为独立应用，安装始终使用静态 manifest.json 中的图标。</div>';
     html += '<div class="card-hint">关闭"消息通知"后将不再弹出系统通知；关闭"后台运行"可节省电量，但后台活跃度会下降。受手机系统省电机制限制，网页后台保活尽力而为。</div>';
     html += '<div class="card-hint">聊天记录与朋友圈数据存储于本地，刷新、关闭、更新网站均不会丢失。</div>';
     html += '<div class="card-hint">若收不到通知：① 浏览器地址栏图标 → 权限 → 通知 → 允许；② 手机系统"设置 → 通知"允许该浏览器；③ 勿开启勿扰模式；④ Chrome 可把本站加入"始终保持活动"。</div>';
@@ -194,21 +180,31 @@ window.MineSettings = (function () {
   function iconCard() {
     var custom = getCustomIcon();
     var src = custom || "icons/icon-192.png";
-    return '<div class="func-row">' +
+    var html = '<div class="func-row">' +
       '<div class="func-icon" style="width:46px;height:46px;border-radius:12px;overflow:hidden;flex:none;">' +
         '<img id="set-icon-preview" src="' + src + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">' +
       '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">桌面图标</span>' +
-        '<span class="func-sub">' + (custom ? "已使用自定义图标" : "当前为内置图标") + '</span>' +
+        '<span class="func-sub">' + (custom ? "已上传自定义图标（导出替换文件后生效）" : "当前为内置 Mine 图标") + '</span>' +
       '</div>' +
       '<button class="chat-bg-btn" id="set-icon-upload" style="flex:none;">' +
         (custom ? "更换" : "选择图片") + '</button>' +
-      (custom
-        ? '<button class="chat-bg-btn" id="set-icon-reset" style="flex:none;margin-left:6px;">恢复默认</button>'
-        : '') +
       '</div>' +
       '<input type="file" accept="image/*" id="set-icon-file" class="file-hidden">';
+    if (custom) {
+      html += '<div class="func-row" style="border-top:none;">' +
+        '<div class="func-icon">' + iconSvg("download", 20) + '</div>' +
+        '<div class="func-text">' +
+          '<span class="func-title">导出图标文件</span>' +
+          '<span class="func-sub">下载 PNG 后替换仓库 icons/ 目录同名文件并重新部署</span>' +
+        '</div>' +
+        '<button class="chat-bg-btn" id="set-icon-dl512" style="flex:none;">下载 512</button>' +
+        '<button class="chat-bg-btn" id="set-icon-dl192" style="flex:none;margin-left:6px;">下载 192</button>' +
+        '<button class="chat-bg-btn" id="set-icon-reset" style="flex:none;margin-left:6px;">恢复默认</button>' +
+        '</div>';
+    }
+    return html;
   }
   /* ---------------- 事件绑定 ---------------- */
   function bindEvents(pageEl) {
@@ -244,10 +240,12 @@ window.MineSettings = (function () {
         setPref("noduck", noduckEl.checked);
       });
     }
-    /* 应用图标：上传 / 恢复默认 */
+    /* 应用图标：上传 / 导出 / 恢复默认 */
     var iconUpload = pageEl.querySelector("#set-icon-upload");
     var iconFile = pageEl.querySelector("#set-icon-file");
     var iconReset = pageEl.querySelector("#set-icon-reset");
+    var iconDl512 = pageEl.querySelector("#set-icon-dl512");
+    var iconDl192 = pageEl.querySelector("#set-icon-dl192");
     if (iconUpload && iconFile) {
       iconUpload.addEventListener("click", function () { iconFile.click(); });
       iconFile.addEventListener("change", function () {
@@ -257,6 +255,12 @@ window.MineSettings = (function () {
     }
     if (iconReset) {
       iconReset.addEventListener("click", resetCustomIcon);
+    }
+    if (iconDl512) {
+      iconDl512.addEventListener("click", function () { downloadCustomIcon(512); });
+    }
+    if (iconDl192) {
+      iconDl192.addEventListener("click", function () { downloadCustomIcon(192); });
     }
     var testBtn = pageEl.querySelector("#set-test");
     var resultEl = pageEl.querySelector("#set-test-result");
