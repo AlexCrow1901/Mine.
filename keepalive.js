@@ -447,26 +447,53 @@ window.MineKeepalive = (function () {
       if (!info.secure) {
         info.hint = "当前页面非 HTTPS 安全连接，通知权限可能无法生效：请用 https:// 地址访问本站后再测试。";
       } else {
-        info.hint = "通知权限尚未授予：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许，然后重新测试。";
+        info.hint = "通知权限尚未授予：请点击下方「测试」按钮（浏览器会弹一次授权框，请选「允许」）；若授权框不出现，说明浏览器已自动阻止本站请求——请到 浏览器设置 → 网站设置 → 通知 → 找到本站 → 重置权限/添加网站例外 后再测试。";
       }
     } else if (info.permission === "denied") {
-      info.hint = "通知权限被拒绝：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许；若浏览器设置已允许，请检查手机「系统设置 → 通知」是否允许该浏览器发送通知。";
+      info.hint = "通知权限已被拒绝/自动禁止：① 地址栏左侧图标 → 网站设置 → 权限 → 通知 → 允许；② 若授权框不再出现（被自动阻止）→ 浏览器设置 → 网站设置 → 通知 → 找到本站（alexcrow1901.github.io）→ 改为「允许」或重置权限；③ 从桌面图标打开时通知由应用自己管理——长按图标卸载后重新「添加到主屏幕/安装」，安装时允许通知。";
     }
     return info;
   }
   /* 请求通知权限：default 时在用户手势内主动请求一次（返回当前状态字符串，异步结果由调用方按需处理） */
-  function requestNotificationPermission() {
-    if (!notificationsSupported()) return "unsupported";
-    if (Notification.permission === "granted") return "granted";
-    if (Notification.permission === "denied") return "denied";
+  /* 请求通知权限（mochi 同款：仅由用户主动操作触发，绝不自动请求）
+     cb(f)  = 授权成功回调；failCb(why) = 'unsupported'|'denied'|'pending'|'error'
+     兼容旧同步用法：不传回调时仍返回状态字符串 */
+  function requestNotificationPermission(cb, failCb) {
+    if (!notificationsSupported()) {
+      if (failCb) failCb("unsupported");
+      return "unsupported";
+    }
+    if (Notification.permission === "granted") {
+      if (cb) cb();
+      return "granted";
+    }
+    if (Notification.permission === "denied") {
+      if (failCb) failCb("denied");
+      return "denied";
+    }
     try {
       var r = Notification.requestPermission();
       if (r && typeof r.then === "function") {
-        r.then(function () {}, function () {});
-        return Notification.permission || "default";
+        r.then(function (p) {
+          var final = p || Notification.permission || "default";
+          if (final === "granted") { if (cb) cb(); }
+          else { if (failCb) failCb(final === "denied" ? "denied" : "pending"); }
+        }, function () {
+          if (failCb) failCb("error");
+        });
+        return "default";
       }
-      if (typeof r === "string") return r;
-    } catch (e) {}
+      if (typeof r === "string") {
+        if (r === "granted") { if (cb) cb(); }
+        else { if (failCb) failCb(r === "denied" ? "denied" : "pending"); }
+        return r;
+      }
+      /* 老式/无返回值实现：以当前属性为准 */
+      if (Notification.permission === "granted") { if (cb) cb(); }
+      else if (failCb) failCb(Notification.permission === "denied" ? "denied" : "pending");
+    } catch (e) {
+      if (failCb) failCb("error");
+    }
     return Notification.permission || "default";
   }
   /* 通知去重指纹 */
@@ -699,13 +726,15 @@ window.MineKeepalive = (function () {
       });
     }
   }
-  /* 首次用户交互后启动保活（浏览器自动播放策略要求用户手势） */
+  /* 首次用户交互后启动保活（浏览器自动播放策略要求用户手势）
+     注意：绝不在此自动请求通知权限！浏览器会把"反复弹出授权框"的
+     站点自动静默阻止（权限变自动禁止），此后 requestPermission 不再弹窗。
+     权限只由用户显式触发（设置页"测试通知"按钮 / 主动操作）时请求一次。 */
   function bindFirstInteraction() {
     if (gestureBound) return;
     gestureBound = true;
     function gesture() {
       startKeepaliveAudio();
-      requestNotificationPermission();
       requestWakeLock();
       writeHeartbeat();
       ["click", "touchstart", "touchend", "keydown"].forEach(function (ev) {
