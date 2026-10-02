@@ -7,7 +7,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Mine</title>
-
   <!-- 主题变量：修改此处即可整体换肤 -->
   <link rel="stylesheet" href="theme.css?v6" />
   <!-- 基础样式 + 雾霭背景层 -->
@@ -40,7 +39,6 @@
   <link rel="stylesheet" href="theme-neumorphism.css?v1" />
 </head>
 <body>
-
   <!-- ===== 多层雾霭背景（见 base.css） ===== -->
   <div class="bg-stack">
     <div class="bg-layer bg-base"></div>
@@ -49,13 +47,10 @@
     <div class="bg-layer bg-noise"></div>
     <div class="bg-layer bg-vignette"></div>
   </div>
-
   <!-- ===== 沉浸式应用外壳 ===== -->
   <main class="app-shell">
-
     <!-- ============ Home 页面 ============ -->
     <section class="page is-active" data-page="home">
-
       <!-- 顶部状态区 -->
       <header class="status-bar">
         <span class="status-time" id="status-time">--:--</span>
@@ -67,59 +62,47 @@
           </span>
         </div>
       </header>
-
       <!-- 可滚动主体 -->
       <div class="app-grid-wrap scroll">
         <div class="greeting">
           <div class="hello">你好</div>
           <div class="date">—</div>
         </div>
-
         <!-- 搜索条 -->
         <div class="search-pill" role="button" tabindex="0">
           <span id="search-icon"></span>
           <span>搜索应用…</span>
         </div>
-
         <!-- 应用图标网格（由 app.js 渲染） -->
         <div class="app-grid" id="app-grid"></div>
       </div>
-
       <!-- 页面指示点 -->
       <div class="page-dots"><i class="is-active"></i><i></i></div>
-
       <!-- 底部 Dock -->
       <nav class="dock">
         <div class="dock-inner" id="dock-inner"></div>
       </nav>
     </section>
-
     <!-- ============ 通用详情页（占位，由 app.js 注入） ============ -->
     <section class="page" data-page="detail" id="page-detail"></section>
-
     <!-- ============ 通讯录页（由 contacts.js 接管） ============ -->
     <section class="page" data-page="contacts" id="page-contacts"></section>
-
     <!-- ============ 聊天页（由 chat.js 接管） ============ -->
     <section class="page" data-page="chat" id="page-chat"></section>
-
     <!-- ============ 陪伴页（由 companion.js 接管） ============ -->
     <section class="page" data-page="companion" id="page-companion"></section>
-
     <!-- ============ 朋友圈页（由 moments.js 接管） ============ -->
     <section class="page" data-page="moments" id="page-moments"></section>
-
   </main>
-
   <!-- ===== 脚本 ===== -->
   <!-- storage.js 必须最先加载：拦截 localStorage，底层使用 IndexedDB 大容量存储 -->
   <script src="storage.js?v2"></script>
   <script src="utils.js?v8"></script>
   <script src="notify.js?v1"></script>
-  <!-- 后台保活：音频保活 + 系统通知 + 回前台补发，需尽早加载 -->
-  <script src="keepalive.js?v1"></script>
-  <!-- 设置（后台保活开关：消息通知 / 后台运行） -->
-  <script src="settings.js?v1"></script>
+  <!-- 后台保活：音频保活（双通道）+ 系统通知 + 回前台补发，需尽早加载 -->
+  <script src="keepalive.js?v2"></script>
+  <!-- 设置（后台保活开关：消息通知 / 后台运行 / 逐条弹 / 不抢声音） -->
+  <script src="settings.js?v2"></script>
   <script src="icons.js?v16"></script>
   <script src="background.js?v8"></script>
     <script src="contacts.js?v20"></script>
@@ -136,7 +119,6 @@
   <script src="contact-moments.js?v1"></script>
   <!-- 主题管理器（主题切换 + 小组件 + 拖拽） -->
   <script src="theme-manager.js?v1"></script>
-  <script src="files.js?v1"></script>
   <script src="app.js?v10"></script>
   <script>
     // 状态栏 wifi 图标 / 搜索图标（等 icons.js 就绪后注入）
@@ -144,6 +126,10 @@
     document.getElementById("search-icon").innerHTML = MineIcons.svg("search", 16);
     // 主题管理器初始化
     if (window.MineTheme) MineTheme.init();
+    // 注册 Service Worker：后台通知通道（页面被系统冻结时仍可弹通知）+ 基础离线缓存
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    }
   </script>
 </body>
 </html>
