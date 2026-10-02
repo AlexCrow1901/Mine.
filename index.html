@@ -7,7 +7,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Mine</title>
-  <link rel="icon" href="data:," />
   <!-- 主题变量：修改此处即可整体换肤 -->
   <link rel="stylesheet" href="theme.css?v6" />
   <!-- 基础样式 + 雾霭背景层 -->
@@ -97,18 +96,17 @@
   </main>
   <!-- ===== 脚本 ===== -->
   <!-- storage.js 必须最先加载：拦截 localStorage，底层使用 IndexedDB 大容量存储 -->
-  <script src="storage.js?v2"></script>
+  <script src="storage.js?v3"></script>
   <script src="utils.js?v8"></script>
   <script src="notify.js?v1"></script>
   <!-- 后台保活：音频保活（双通道）+ 系统通知 + 回前台补发，需尽早加载 -->
   <script src="keepalive.js?v2"></script>
-  <!-- 图标库必须先于 settings.js 等使用 MineIcons 的模块加载 -->
-  <script src="icons.js?v16"></script>
   <!-- 设置（后台保活开关：消息通知 / 后台运行 / 逐条弹 / 不抢声音） -->
   <script src="settings.js?v3"></script>
-  <script src="background.js?v9"></script>
+  <script src="icons.js?v16"></script>
+  <script src="background.js?v8"></script>
     <script src="contacts.js?v20"></script>
-  <script src="chat.js?v40"></script>
+  <script src="chat.js?v41"></script>
   <!-- 电话模块（依赖 MineContacts / MineIcons） -->
   <script src="phone.js?v1"></script>
   <script src="companion.js?v7"></script>
