@@ -65,10 +65,15 @@ window.MineContacts = (function () {
           }
           // 回复延迟（秒），默认 1.5 秒
           if (c.replyDelay === undefined) c.replyDelay = 1.5;
-          // 主动发消息设置（默认关闭；区间 1 分钟 ~ 12 小时）
+          // 主动发消息设置（默认开启；区间 1 分钟 ~ 12 小时）
           if (c.proactiveOn === undefined) c.proactiveOn = true;
-          if (c.proactiveMin === undefined) c.proactiveMin = 60;
+          if (c.proactiveMin === undefined) c.proactiveMin = 1;
           if (c.proactiveMax === undefined) c.proactiveMax = 720;
+          // 迁移旧默认：此前默认最短间隔为 60 分钟且从未自定义（60~720 为默认组合）→ 改为 1 分钟
+          if (c.proactiveMin === 60 && c.proactiveMax === 720) {
+            c.proactiveMin = 1;
+            c.proactiveMax = 720;
+          }
           // 去重：清理历史遗留的重复字卡
           if (U && c.cards.length > 1) c.cards = U.deduplicateCards(c.cards);
           // 排序字卡（文本按拼音 A→Z，图片追加末尾）
@@ -460,7 +465,7 @@ window.MineContacts = (function () {
       '<div class="reply-hint">1% 概率触发自动回复 · 回复时间在 0 ~ 设定值内随机 · 拖动调节 0 秒 ~ 10 分钟</div>';
 
     // 主动消息设置（对方主动发消息的时间区间，1 分钟 ~ 12 小时，始终开启）
-    var proMin = (c.proactiveMin !== undefined) ? c.proactiveMin : 60;
+    var proMin = (c.proactiveMin !== undefined) ? c.proactiveMin : 1;
     var proMax = (c.proactiveMax !== undefined) ? c.proactiveMax : 720;
     var proStateLabel = "已开启 · " + formatProactiveLabel(proMin) + " ~ " + formatProactiveLabel(proMax);
     html += '<div class="reply-setting-row proactive-head-row">' +
