@@ -1,14 +1,14 @@
 /* ========================================================================
-   Mine · 字卡管理（我的字卡）
+   Mine · 字卡管理（我的字卡 + 系统字卡）
    ------------------------------------------------------------------------
-   · 公用字卡：所有联系人自动回复时均可使用
-   · 单独字卡：仅供指定联系人自动回复时使用（通讯录联系人直接列出，
-     点击联系人姓名即可添加，无需先到通讯录添加）
-   · 字卡类型：字符 / emoji / 图片，每一栏一种类型，点击栏头折叠/展开
+   · 公用字卡：所有联系人均可使用
+   · 单独字卡：仅供指定联系人使用（通讯录联系人直接列出，点击姓名即可添加）
+   · 系统字卡：系统预置 / 用户自建，所有联系人均可使用（独立发送概率）
+   · 字卡类型：字符 / emoji / 图片 / 语音，每一栏一种类型，点击栏头折叠/展开
    · 数据存储于 localStorage "mine.cards.v1"：
-       { public: [card...], per: { cid: [card...] } }
-   · 聊天回复逻辑（chat.js）调用 getReplyPool(contactId) 获取可用字卡池：
-       单独字卡(该联系人) → 公用字卡 → 联系人自带 cards（兜底）
+       { public: [card...], per: { cid: [card...] }, sys: [card...] }
+   · 聊天回复逻辑（chat.js）：getReplyPool(contactId) 返回 单独+公用 字卡池，
+     系统字卡通过 getSysCards() 单独读取并按"系统字卡发送概率"抽取。
    ======================================================================== */
 
 window.MineCards = (function () {
@@ -19,8 +19,8 @@ window.MineCards = (function () {
   var C = window.MineContacts;
   var STORE_KEY = "mine.cards.v1";
 
-  var state = { public: [], per: {} };
-  var expandedTypes = { text: true, emoji: true, image: true };  // 类型栏折叠状态
+  var state = { public: [], per: {}, sys: [] };
+  var expandedTypes = { text: true, emoji: true, image: true, audio: false };  // 类型栏折叠状态
 
   /* ==================== 字卡类型判断（与 chat.js 保持同一套规则） ==================== */
   function isImageCard(card) {
@@ -55,10 +55,12 @@ window.MineCards = (function () {
         var d = JSON.parse(raw);
         state.public = Array.isArray(d.public) ? d.public : [];
         state.per = (d.per && typeof d.per === "object") ? d.per : {};
+        state.sys = Array.isArray(d.sys) ? d.sys : [];
       }
     } catch (e) {}
     if (!Array.isArray(state.public)) state.public = [];
     if (!state.per || typeof state.per !== "object") state.per = {};
+    if (!Array.isArray(state.sys)) state.sys = [];
   }
 
   /* ==================== 数据读写 ==================== */
@@ -66,7 +68,9 @@ window.MineCards = (function () {
   function getPerCards(cid) {
     return (cid && state.per[cid]) ? state.per[cid].slice() : [];
   }
-  /* 聊天回复使用的完整字卡池：单独字卡(该联系人) + 公用字卡 */
+  /* 系统字卡（所有联系人可用，独立发送概率） */
+  function getSysCards() { return state.sys.slice(); }
+  /* 聊天回复使用的字卡池：单独字卡(该联系人) + 公用字卡（系统字卡由 chat.js 单独读取） */
   function getReplyPool(cid) {
     var pool = [];
     if (cid && state.per[cid] && state.per[cid].length) {
@@ -76,7 +80,7 @@ window.MineCards = (function () {
     return pool;
   }
   function hasAnyCards() {
-    return state.public.length > 0 || Object.keys(state.per).some(function (k) {
+    return state.public.length > 0 || state.sys.length > 0 || Object.keys(state.per).some(function (k) {
       return state.per[k] && state.per[k].length > 0;
     });
   }
@@ -91,6 +95,19 @@ window.MineCards = (function () {
   function removePublicCard(idx) {
     if (idx < 0 || idx >= state.public.length) return false;
     state.public.splice(idx, 1);
+    save();
+    return true;
+  }
+  function addSysCard(card) {
+    var v = String(card || "").trim();
+    if (!v) return false;
+    state.sys.push(v);
+    save();
+    return true;
+  }
+  function removeSysCard(idx) {
+    if (idx < 0 || idx >= state.sys.length) return false;
+    state.sys.splice(idx, 1);
     save();
     return true;
   }
@@ -170,13 +187,16 @@ window.MineCards = (function () {
       '<div class="card-tabs">' +
         '<button class="card-tab' + (currentTab === "public" ? " is-active" : "") + '" data-tab="public">公用字卡</button>' +
         '<button class="card-tab' + (currentTab === "per" ? " is-active" : "") + '" data-tab="per">单独字卡</button>' +
+        '<button class="card-tab' + (currentTab === "sys" ? " is-active" : "") + '" data-tab="sys">系统字卡</button>' +
       '</div>';
 
     var content = "";
     if (currentTab === "public") {
       content = renderPublicTab();
-    } else {
+    } else if (currentTab === "per") {
       content = renderPerTab();
+    } else {
+      content = renderSysTab();
     }
 
     body.innerHTML = tabs + content;
@@ -187,6 +207,13 @@ window.MineCards = (function () {
   function renderPublicTab() {
     var html = '<div class="card-hint">公用字卡：所有联系人自动回复时均可使用</div>';
     html += renderCardEditor(state.public, "public", null);
+    return html;
+  }
+
+  /* ---- 系统字卡 tab：所有联系人均可使用，独立发送概率 ---- */
+  function renderSysTab() {
+    var html = '<div class="card-hint">系统字卡：所有联系人均可使用，发送概率可在「概率修改 - 字卡概率」中调整</div>';
+    html += renderCardEditor(state.sys, "sys", null, true);
     return html;
   }
 
@@ -361,6 +388,7 @@ window.MineCards = (function () {
         var idx = parseInt(btn.getAttribute("data-del-idx"), 10);
         if (scope === "public") removePublicCard(idx);
         else if (scope === "per") removePerCard(cid, idx);
+        else if (scope === "sys") removeSysCard(idx);
         render();
       });
     });
@@ -374,7 +402,9 @@ window.MineCards = (function () {
         var input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
         var v = input ? input.value : "";
         if (!v) { showToast("请输入字卡内容"); return; }
-        var ok = (scope === "public") ? addPublicCard(v) : addPerCard(cid, v);
+        var ok = (scope === "public") ? addPublicCard(v)
+               : (scope === "sys") ? addSysCard(v)
+               : addPerCard(cid, v);
         if (ok && input) input.value = "";
         render();
       });
@@ -408,6 +438,7 @@ window.MineCards = (function () {
                   var dataURL = ev.target.result;
                   if (!dataURL) return;
                   if (scope === "public") addPublicCard(dataURL);
+                  else if (scope === "sys") addSysCard(dataURL);
                   else if (scope === "per" && cid) addPerCard(cid, dataURL);
                   render();
                 };
@@ -418,6 +449,7 @@ window.MineCards = (function () {
                   U.compressImage(f, 600, 0.78, function (dataURL) {
                     if (!dataURL) return;
                     if (scope === "public") addPublicCard(dataURL);
+                    else if (scope === "sys") addSysCard(dataURL);
                     else if (scope === "per" && cid) addPerCard(cid, dataURL);
                     render();
                   });
@@ -446,7 +478,8 @@ window.MineCards = (function () {
     } catch (e) {}
   }
 
-  function openManager() {
+  function openManager(tab) {
+    if (tab === "public" || tab === "per" || tab === "sys") currentTab = tab;
     buildSheet();
     requestAnimationFrame(function () {
       overlayEl.classList.add("is-open");
@@ -470,10 +503,13 @@ window.MineCards = (function () {
     closeManager: closeManager,
     getPublicCards: getPublicCards,
     getPerCards: getPerCards,
+    getSysCards: getSysCards,
     getReplyPool: getReplyPool,
     hasAnyCards: hasAnyCards,
     addPublicCard: addPublicCard,
     removePublicCard: removePublicCard,
+    addSysCard: addSysCard,
+    removeSysCard: removeSysCard,
     addPerCard: addPerCard,
     removePerCard: removePerCard,
     isImageCard: isImageCard,

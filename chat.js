@@ -591,15 +591,16 @@ window.MineChat = (function () {
     return cards.filter(function (c) { return !isImageCard(c) && !isAudioCard(c) && !isEmojiCard(c); });
   }
   /**
-   * 通用字卡选择器：5% 概率发送图片字卡，10% 概率发送 emoji 字卡，3% 概率发送语音字卡
-   * · 若池中有图片字卡且命中 5% → 从图片字卡中随机抽取
-   * · 若池中有 emoji 字卡且命中 10% → 从 emoji 字卡中随机抽取
-   * · 若池中有语音字卡且命中 3% → 从语音字卡中随机抽取
-   * · 否则从文字字卡中随机抽取
-   * · 若无文字字卡则从全池随机抽取
+   * 通用字卡选择器（概率均可自定义，见「概率修改 - 字卡概率」）：
+   * · 图片字卡概率 imageCard（默认 5%）
+   * · emoji 字卡概率 emojiCard（默认 10%）
+   * · 语音字卡概率 audioCard（默认 3%）
+   * · 系统字卡概率 sysCard（默认 10%，所有联系人可用）
+   * · 其余从文字字卡随机抽取；无文字字卡则从全池随机抽取
    */
   function pickCardWithImageChance(pool) {
     if (!pool || pool.length === 0) return null;
+    var sysCards = window.MineCards && window.MineCards.getSysCards ? window.MineCards.getSysCards() : [];
     var imageCards = filterImageCards(pool);
     var emojiCards = filterEmojiCards(pool);
     var audioCards = filterAudioCards(pool);
@@ -613,8 +614,16 @@ window.MineChat = (function () {
     if (audioCards.length > 0 && Math.random() < prob("audioCard")) {
       return audioCards[Math.floor(Math.random() * audioCards.length)];
     }
+    /* 系统字卡：所有联系人均可使用，独立发送概率（可配置） */
+    if (sysCards.length > 0 && Math.random() < prob("sysCard")) {
+      return sysCards[Math.floor(Math.random() * sysCards.length)];
+    }
     if (textCards.length > 0) {
       return textCards[Math.floor(Math.random() * textCards.length)];
+    }
+    /* 兜底：仅剩系统字卡时使用 */
+    if (sysCards.length > 0) {
+      return sysCards[Math.floor(Math.random() * sysCards.length)];
     }
     return pool[Math.floor(Math.random() * pool.length)];
   }
@@ -681,10 +690,13 @@ window.MineChat = (function () {
    */
   function pickRandomMembers(group, n) {
     var groupHasCards = group && group.cards && group.cards.length > 0;
+    var hasSysCards = window.MineCards && window.MineCards.getSysCards
+      ? window.MineCards.getSysCards().length > 0
+      : false;
     var members = (group.members || []).map(C.findContact).filter(function (c) {
       if (!c) return false;
-      // 我的单独字卡 + 我的公用字卡（所有联系人可用）
-      var hasMine = mineCardPool(c.id).length > 0;
+      // 我的单独字卡 + 我的公用字卡（所有联系人可用）+ 系统字卡（所有联系人可用）
+      var hasMine = mineCardPool(c.id).length > 0 || hasSysCards;
       // 有个人字卡 或 群有群字卡 → 可回复
       return hasMine || (c.cards && c.cards.length > 0) || groupHasCards;
     });
@@ -1184,12 +1196,15 @@ window.MineChat = (function () {
         // ≤2人：第二条回复概率可自定义（默认 40%）
         numReply = Math.random() < (1 - prob("groupSecond")) ? 1 : 2;
       } else {
-        // ≥3人：50% → 1人, 30% → 2人, 15% → 3人, 5% → 全部
+        // ≥3人：1人 50% / 2人 30% 为基础；
+        // "群聊第三条回复"（默认 15%）→ 3 人，"群聊全员回复"（默认 5%）→ 全部；
+        // 剩余概率按 1人 : 2人 = 5 : 3 分配（回落，保持原默认分布不变）
+        var pThird = prob("groupThird");
+        var pAll = prob("groupAll");
         var r = Math.random();
-        if (r < 0.50) numReply = 1;
-        else if (r < 0.80) numReply = 2;
-        else if (r < 0.95) numReply = 3;
-        else numReply = allResponders.length;
+        if (r < pThird) numReply = 3;
+        else if (r < pThird + pAll) numReply = allResponders.length;
+        else numReply = (Math.random() < 0.625) ? 1 : 2;
       }
       var responders = allResponders.slice(0, Math.min(numReply, allResponders.length));
       if (responders.length === 0) return;

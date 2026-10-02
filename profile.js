@@ -116,7 +116,7 @@ window.MineProfile = (function () {
       '<div class="func-icon">' + I.svg("bookmark", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">系统字卡</span>' +
-        '<span class="func-sub">系统预置字卡，即将上线</span>' +
+        '<span class="func-sub">所有联系人可用，发送概率可在字卡概率中修改</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
@@ -184,14 +184,17 @@ window.MineProfile = (function () {
       });
     }
 
-    // 系统字卡入口 → 占位提示（内容后期新增）
+    // 系统字卡入口 → 打开系统字卡编辑器（所有联系人可用，独立发送概率）
     var sysCardsBtn = pageEl.querySelector('[data-act="open-sys-cards"]');
     if (sysCardsBtn) {
       sysCardsBtn.addEventListener("click", function () {
-        showToast("系统字卡即将上线，敬请期待");
+        if (window.MineCards && window.MineCards.openManager) window.MineCards.openManager("sys");
       });
       sysCardsBtn.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showToast("系统字卡即将上线，敬请期待"); }
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (window.MineCards && window.MineCards.openManager) window.MineCards.openManager("sys");
+        }
       });
     }
   }
