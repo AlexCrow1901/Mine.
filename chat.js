@@ -1,4 +1,4 @@
- /* ========================================================================
+/* ========================================================================
    Mine · 聊天模块
    ------------------------------------------------------------------------
    功能：
@@ -11,29 +11,25 @@
    · 会话列表（聊天应用主页，显示最近对话）
    接入：通过 MineApp.page("chat") 钩子接管主页；
          openContact(id) / openGroup(id) 供通讯录模块调用。
+   通知集成：后台收到消息时由 MineKeepalive 弹系统通知；
+             点击通知跳回对应会话；回前台汇总未读通知。
    ======================================================================== */
-
 window.MineChat = (function () {
   "use strict";
-
   var STORE_KEY = "mine.chat.v1";
   var UNREAD_KEY = "mine.chat.unread.v1";
   var BG_KEY = "mine.chat.bg.v1";   /* 每个会话的自定义背景图 */
   var I = window.MineIcons;
   var C = window.MineContacts;   // 通讯录数据接口
-
   /* ---------------- 数据：会话存储 ----------------
      conversations: {
        "contact:c1": [ { from:"me"|"c1", text, time }, ... ],
        "group:g1":    [ ... ]
      } */
   var conversations = {};
-  var chatLoaded = false;   // 会话是否已从 localStorage 载入（主动消息触发前确保已载入）
-
   /* ---------------- 数据：未读计数 ----------------
      unreadCounts: { "contact:c1": 3, "group:g1": 1, ... } */
   var unreadCounts = {};
-
   function load() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
@@ -54,18 +50,15 @@ window.MineChat = (function () {
       }
     } catch (e) {}
     if (!conversations) conversations = {};
-
     // 加载未读计数
     try {
       var rawUnread = localStorage.getItem(UNREAD_KEY);
       if (rawUnread) unreadCounts = JSON.parse(rawUnread) || {};
     } catch (e) {}
     if (!unreadCounts) unreadCounts = {};
-
     // 加载会话背景图
     loadBg();
     loadChatFontColor();
-    chatLoaded = true;
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(conversations)); } catch (e) {}
@@ -73,12 +66,10 @@ window.MineChat = (function () {
   function saveUnread() {
     try { localStorage.setItem(UNREAD_KEY, JSON.stringify(unreadCounts)); } catch (e) {}
   }
-
   /* ==================== 每个会话的自定义背景图 ====================
      chatBg: { "contact:c1": "data:image/...", "group:g1": "data:image/..." }
      使用 localStorage 存储（图片经压缩，单张约 100~200KB） */
   var chatBg = {};
-
   function loadBg() {
     try {
       var raw = localStorage.getItem(BG_KEY);
@@ -171,10 +162,8 @@ window.MineChat = (function () {
   function openBgSettings() {
     var overlay = document.createElement("div");
     overlay.className = "chat-bg-overlay";
-
     var curBg = getConvBg(ctx.convKey);
     var curFc = getConvFontColor(ctx.convKey);
-
     var sheet = document.createElement("div");
     sheet.className = "chat-bg-sheet";
     sheet.innerHTML =
@@ -204,21 +193,17 @@ window.MineChat = (function () {
             '<span class="fc-swatch fc-black"></span><span>黑色</span></button>' +
         '</div>' +
       '</div>';
-
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
     requestAnimationFrame(function () { overlay.classList.add("is-open"); });
-
     function closeSheet() {
       overlay.classList.remove("is-open");
       setTimeout(function () { overlay.remove(); }, 300);
     }
-
     overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closeSheet();
     });
     sheet.querySelector('[data-act="close"]').addEventListener("click", closeSheet);
-
     var fileInput = sheet.querySelector("#chat-bg-file");
     sheet.querySelector('[data-act="upload"]').addEventListener("click", function () {
       fileInput.click();
@@ -245,7 +230,6 @@ window.MineChat = (function () {
         }
       }
     });
-
     var clearBtn = sheet.querySelector('[data-act="clear"]');
     if (clearBtn) {
       clearBtn.addEventListener("click", function () {
@@ -254,7 +238,6 @@ window.MineChat = (function () {
         closeSheet();
       });
     }
-
     /* 字体颜色按钮 */
     sheet.querySelectorAll("[data-fc]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -272,51 +255,50 @@ window.MineChat = (function () {
       });
     });
   }
-
   /* ---------------- 未读计数工具 ---------------- */
   var appLevelSeen = false;  // 用户是否已打开过聊天应用（控制主屏角标）
-
   function incrementUnread(convKey) {
     if (!unreadCounts[convKey]) unreadCounts[convKey] = 0;
     unreadCounts[convKey]++;
     appLevelSeen = false;  // 新消息到达 → 主屏角标重新显示
     saveUnread();
     if (window.MineNotify) MineNotify.refreshBadges();
-    // 后台保活：页面不在前台时弹出系统通知
+    /* 后台收到消息 → 系统通知（去重/通道由保活模块统一处理） */
     if (window.MineKeepalive && document.visibilityState !== "visible") {
-      var info = convNotifyInfo(convKey);
-      MineKeepalive.notify(info.title, info.body);
+      MineKeepalive.notify(convTitle(convKey), msgPreviewText(convKey), {
+        convKey: convKey,
+        kind: "msg"
+      });
     }
   }
-
-  /* ---------------- 系统通知文案解析 ---------------- */
-  function msgPreviewText(m) {
-    var t = String((m && m.text) || "").replace(/\s+/g, " ").trim();
-    if (t.indexOf("data:image/") === 0) return "[图片]";
-    if (t.indexOf("data:audio/") === 0) return "[语音]";
-    return t.length > 40 ? t.slice(0, 40) + "…" : (t || "新消息");
-  }
-  function convNotifyInfo(convKey) {
-    var ci = convKey.indexOf(":");
-    var type = convKey.slice(0, ci);
-    var id = convKey.slice(ci + 1);
-    var title = "Mine";
-    var body = "你收到一条新消息";
-    var msgs = conversations[convKey] || [];
-    var last = msgs[msgs.length - 1];
-    if (type === "contact") {
-      var c = C.findContact ? C.findContact(id) : null;
-      title = c ? c.name : "联系人";
-      if (last) body = msgPreviewText(last);
-    } else if (type === "group") {
-      var g = C.findGroup ? C.findGroup(id) : null;
-      title = g ? g.name : "群聊";
-      if (last) {
-        var who = last.senderName || (last.from === "me" ? "我" : "群成员");
-        body = who + "：" + msgPreviewText(last);
+  /* 会话标题（用于系统通知） */
+  function convTitle(convKey) {
+    try {
+      if (convKey.indexOf("contact:") === 0) {
+        var c = C.findContact(convKey.substring(8));
+        if (c && c.name) return c.name;
+      } else if (convKey.indexOf("group:") === 0) {
+        var g = C.findGroup(convKey.substring(6));
+        if (g && g.name) return g.name;
       }
-    }
-    return { title: title, body: body };
+    } catch (e) {}
+    return "Mine";
+  }
+  /* 会话最后一条消息预览（用于系统通知正文） */
+  function msgPreviewText(convKey) {
+    try {
+      var msgs = conversations[convKey];
+      if (!msgs || msgs.length === 0) return "你收到一条新消息";
+      var last = msgs[msgs.length - 1];
+      var senderPrefix = "";
+      if (last.from !== "me" && last.senderName && convKey.indexOf("group:") === 0) {
+        senderPrefix = last.senderName + "：";
+      }
+      var t = last.text || "";
+      if (typeof t === "string" && t.indexOf("data:image/") === 0) t = "[图片]";
+      else if (typeof t === "string" && t.length > 40) t = t.substring(0, 40) + "…";
+      return (senderPrefix + t) || "你收到一条新消息";
+    } catch (e) { return "你收到一条新消息"; }
   }
   function clearUnread(convKey) {
     if (unreadCounts[convKey]) {
@@ -339,28 +321,23 @@ window.MineChat = (function () {
   function getNotifyCount() {
     return appLevelSeen ? 0 : getTotalUnread();
   }
-
   /* 判断当前是否正在查看某个会话 */
   function isViewingConv(convKey) {
     var chatPage = document.getElementById("page-chat");
     if (!chatPage || !chatPage.classList.contains("is-active")) return false;
     return ctx.convKey === convKey;
   }
-
   /* ---------------- 工具 ---------------- */
   function uid() { return "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1000); }
-
   function escapeHtml(s) {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      .replace( />/g, "&gt;").replace(/"/g, "&quot;");
   }
-
   function fmtTime(ts) {
     var d = new Date(ts);
     var h = d.getHours(); var m = d.getMinutes();
     return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
   }
-
   function fmtDateSep(ts) {
     var d = new Date(ts);
     var now = new Date();
@@ -368,7 +345,6 @@ window.MineChat = (function () {
     var y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate();
     return y + "年" + mo + "月" + da + "日";
   }
-
   /**
    * 将文本按每 N 个字符换行（保留已有换行）
    * @param {string} text - 原始文本
@@ -390,7 +366,6 @@ window.MineChat = (function () {
     });
     return result.join("<br>");
   }
-
   /**
    * 渲染抉择消息：标题行 + ABCD 选项逐行对齐
    * 使用 .choice-msg-options 容器包裹所有选项，确保字母标签列对齐
@@ -408,7 +383,6 @@ window.MineChat = (function () {
     var firstLine = true;
     var optionsHtml = "";
     var hasOptions = false;
-
     /* 构建选项字母 → 选择者名单 的映射 */
     var selectedMap = {};
     if (msg && msg.choiceAnswers && msg.choiceAnswers.length > 0) {
@@ -418,7 +392,6 @@ window.MineChat = (function () {
       });
     }
     var hasAnswers = msg && msg.choiceAnswers && msg.choiceAnswers.length > 0;
-
     lines.forEach(function (line) {
       var safe = escapeHtml(line);
       if (firstLine) {
@@ -457,7 +430,6 @@ window.MineChat = (function () {
     }
     return html;
   }
-
   /* ---------------- "我"的头像 ---------------- */
   var ME_KEY = "mine.me.v1";
   var meProfile = null;
@@ -482,14 +454,11 @@ window.MineChat = (function () {
     return '<div class="avatar avatar-gen' + c + '" style="width:' + s + 'px;height:' + s + 'px;">' +
       escapeHtml(C ? C.firstChar(meProfile ? meProfile.name : "我") : "我") + '</div>';
   }
-
   /* ---------------- 字卡选择工具 ---------------- */
-
   /** 判断字卡是否为图片字卡（base64 data URI） */
   function isImageCard(card) {
     return typeof card === "string" && card.indexOf("data:image/") === 0;
   }
-
   /** 判断字卡是否为 emoji 字卡（由 emoji 字符组成的短串） */
   function isEmojiCard(card) {
     if (typeof card !== "string" || card.length === 0) return false;
@@ -505,25 +474,21 @@ window.MineChat = (function () {
              (code >= 0x2300 && code <= 0x23FF);
     });
   }
-
   /** 从卡池中筛选图片字卡 */
   function filterImageCards(cards) {
     if (!cards || cards.length === 0) return [];
     return cards.filter(isImageCard);
   }
-
   /** 从卡池中筛选 emoji 字卡 */
   function filterEmojiCards(cards) {
     if (!cards || cards.length === 0) return [];
     return cards.filter(isEmojiCard);
   }
-
   /** 从卡池中筛选文字字卡（排除图片和 emoji） */
   function filterTextCards(cards) {
     if (!cards || cards.length === 0) return [];
     return cards.filter(function (c) { return !isImageCard(c) && !isEmojiCard(c); });
   }
-
   /**
    * 通用字卡选择器：10% 概率发送图片字卡，10% 概率发送 emoji 字卡
    * · 若池中有图片字卡且命中 10% → 从图片字卡中随机抽取
@@ -547,13 +512,11 @@ window.MineChat = (function () {
     }
     return pool[Math.floor(Math.random() * pool.length)];
   }
-
   /** 从联系人的字卡中随机抽取一条（10% 概率图片字卡，10% 概率 emoji 字卡） */
   function pickRandomCard(contact) {
     if (!contact || !contact.cards || contact.cards.length === 0) return null;
     return pickCardWithImageChance(contact.cards);
   }
-
   /**
    * 群聊中合并个人字卡 + 群字卡后随机抽取（10% 概率图片字卡，10% 概率 emoji 字卡）
    * @param contact  回复者
@@ -565,13 +528,11 @@ window.MineChat = (function () {
     if (group && group.cards) pool = pool.concat(group.cards);
     return pickCardWithImageChance(pool);
   }
-
   /** 从联系人的自动回复字卡中随机抽取一条（10% 概率图片字卡，10% 概率 emoji 字卡） */
   function pickRandomAutoCard(contact) {
     if (!contact || !contact.autoCards || contact.autoCards.length === 0) return null;
     return pickCardWithImageChance(contact.autoCards);
   }
-
   /** 群聊中合并个人自动回复字卡 + 群自动回复字卡后随机抽取（10% 概率图片字卡，10% 概率 emoji 字卡） */
   function pickRandomAutoCardForGroup(contact, group) {
     var pool = [];
@@ -579,7 +540,6 @@ window.MineChat = (function () {
     if (group && group.autoCards) pool = pool.concat(group.autoCards);
     return pickCardWithImageChance(pool);
   }
-
   /**
    * 附加 emoji 字卡选择器
    * 当主字卡为文字字卡时，15% 概率附加 1~3 条 emoji
@@ -600,7 +560,6 @@ window.MineChat = (function () {
     }
     return result;
   }
-
   /**
    * 从群成员中随机选取 n 位可回复的成员
    * 可回复 = 有个人字卡 或 群有群字卡
@@ -620,7 +579,6 @@ window.MineChat = (function () {
     }
     return members.slice(0, Math.min(n, members.length));
   }
-
   /* ---------------- 当前聊天上下文 ---------------- */
   var ctx = {
     type: null,       // "contact" | "group"
@@ -629,12 +587,10 @@ window.MineChat = (function () {
     title: "",
     subtitle: ""
   };
-
   var pageEl = null;
   var msgContainer = null;
   var inputEl = null;
   var sendBtn = null;
-
   /* ========================================================================
      打开聊天
      ======================================================================== */
@@ -654,7 +610,6 @@ window.MineChat = (function () {
     renderChatPage();
     if (window.MineApp && MineApp.switchPage) MineApp.switchPage("chat");
   }
-
   function openGroup(groupId) {
     if (C && C.loadData) C.loadData();
     loadMe();
@@ -671,14 +626,12 @@ window.MineChat = (function () {
     renderChatPage();
     if (window.MineApp && MineApp.switchPage) MineApp.switchPage("chat");
   }
-
   /* ========================================================================
      渲染聊天页
      ======================================================================== */
   function renderChatPage() {
     if (!pageEl) pageEl = document.getElementById("page-chat");
     if (!pageEl) return;
-
     // 导航栏
     var navHtml =
       '<div class="nav-bar">' +
@@ -694,7 +647,6 @@ window.MineChat = (function () {
           '<button class="nav-btn chat-more-btn" data-act="bg-settings">' + I.svg("more", 20) + '</button>' +
         '</span>' +
       '</div>';
-
     // with me 可折叠栏目
     var withMeHtml =
       '<div class="with-me-bar" id="with-me-bar">' +
@@ -720,11 +672,8 @@ window.MineChat = (function () {
           '</div>' +
         '</div>' +
       '</div>';
-
-
     // 消息区域
     var msgHtml = '<div class="chat-messages" id="chat-messages"></div>';
-
     // 输入栏
     var inputHtml =
       '<div class="chat-input-bar">' +
@@ -732,36 +681,27 @@ window.MineChat = (function () {
         'placeholder="输入消息…" maxlength="2000"></textarea>' +
         '<button class="chat-send-btn" id="chat-send" disabled>' + I.svg("send", 18) + '</button>' +
       '</div>';
-
     pageEl.innerHTML = navHtml + withMeHtml + msgHtml + inputHtml;
-
     // 缓存 DOM
     msgContainer = pageEl.querySelector("#chat-messages");
     inputEl = pageEl.querySelector("#chat-input");
     sendBtn = pageEl.querySelector("#chat-send");
-
     // 渲染历史消息
     renderMessages();
-
     // 应用会话自定义背景
     applyConvBg();
-
     // 应用会话字体颜色
     applyChatFontColor();
-
     // 绑定事件
     bindChatEvents();
-
     // 滚到底部
     scrollToBottom();
   }
-
   /* ---------------- 渲染所有消息 ---------------- */
   function renderMessages() {
     var msgs = conversations[ctx.convKey] || [];
     var html = "";
     var lastDateStr = "";
-
     msgs.forEach(function (msg) {
       var dateStr = fmtDateSep(msg.time);
       if (dateStr !== lastDateStr) {
@@ -770,16 +710,13 @@ window.MineChat = (function () {
       }
       html += msgRowHTML(msg);
     });
-
     msgContainer.innerHTML = html;
     scrollToBottom();
   }
-
   /* ---------------- 单条消息 HTML ---------------- */
   function msgRowHTML(msg) {
     var isMe = msg.from === "me";
     var sender = null;
-
     if (!isMe) {
       // 先尝试从通讯录查找
       if (ctx.type === "group") {
@@ -797,7 +734,6 @@ window.MineChat = (function () {
         }
       }
     }
-
     var avatarHTML = "";
     var senderNameHTML = "";
     if (isMe) {
@@ -817,53 +753,37 @@ window.MineChat = (function () {
         senderNameHTML = '<div class="msg-sender">' + escapeHtml(displayName) + '</div>';
       }
     }
-
     var bubbleClass = isMe ? "is-me" : "is-them";
     if (msg.isEmpty) bubbleClass += " is-empty";
     if (msg.isChoice) bubbleClass += " is-choice-msg";
-
-       // 图片消息检测
+    // 图片消息检测
     var isImageMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:image/") === 0;
     if (isImageMsg) bubbleClass += " is-image-msg";
-
-    // 语音消息检测
-    var isAudioMsg = !msg.isChoice && typeof msg.text === "string" && msg.text.indexOf("data:audio/") === 0;
-    if (isAudioMsg) bubbleClass += " is-image-msg";
-
     // emoji 消息检测
-    var isEmojiMsg = !msg.isChoice && !isAudioMsg && typeof msg.text === "string" && isEmojiCard(msg.text);
-
+    var isEmojiMsg = !msg.isChoice && typeof msg.text === "string" && isEmojiCard(msg.text);
     if (isEmojiMsg) bubbleClass += " is-emoji-msg";
-
     var rowClass = isMe ? "msg-row is-me" : "msg-row";
-
     // 抉择消息使用特殊渲染（ABCD 逐行对齐）；图片消息渲染为图片气泡；emoji 消息与文字同等大小
     var bubbleText;
-        if (isImageMsg) {
+    if (isImageMsg) {
       bubbleText = '<img class="msg-image" src="' + escapeHtml(msg.text) + '" alt="图片">';
-    } else if (isAudioMsg) {
-      bubbleText = '<audio controls preload="none" src="' + escapeHtml(msg.text) + '" style="width:200px;max-width:60vw;"></audio>';
     } else if (isEmojiMsg) {
-
       bubbleText = '<span class="msg-emoji">' + escapeHtml(msg.text) + '</span>';
     } else if (msg.isChoice) {
       bubbleText = renderChoiceText(msg);
     } else {
       bubbleText = wrapText(msg.text, 12);
     }
-
     // 自动回复标记
     var autoTag = "";
     if (msg.isAutoReply) {
       autoTag = '<span class="auto-reply-tag">自动回复</span>';
     }
-
     // 已读对勾（仅我的消息且已读时才显示）
     var readMark = "";
     if (isMe && msg.read) {
       readMark = '<span class="msg-read is-read">' + I.svg("check", 13) + '</span>';
     }
-
     return '<div class="' + rowClass + '">' +
       (isMe ? "" : avatarHTML) +
       '<div class="msg-content">' +
@@ -876,14 +796,12 @@ window.MineChat = (function () {
       (isMe ? avatarHTML : "") +
       '</div>';
   }
-
   /* ---------------- 滚到底部 ---------------- */
   function scrollToBottom() {
     requestAnimationFrame(function () {
       if (msgContainer) msgContainer.scrollTop = msgContainer.scrollHeight;
     });
   }
-
   /* ========================================================================
      绑定事件
      ======================================================================== */
@@ -892,11 +810,9 @@ window.MineChat = (function () {
     pageEl.querySelector('[data-act="back"]').addEventListener("click", function () {
       openConvList();
     });
-
     // 背景设置按钮
     var bgBtn = pageEl.querySelector('[data-act="bg-settings"]');
     if (bgBtn) bgBtn.addEventListener("click", openBgSettings);
-
     // with me 栏目展开/收起
     var withMeToggle = pageEl.querySelector("#with-me-toggle");
     var withMePanel = pageEl.querySelector("#with-me-panel");
@@ -909,7 +825,6 @@ window.MineChat = (function () {
         }
       });
     }
-
       // 抉择功能
     var choiceBtn = pageEl.querySelector('[data-wm="choice"]');
     if (choiceBtn) {
@@ -918,7 +833,6 @@ window.MineChat = (function () {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openChoiceDialog(); }
       });
     }
-
     // 电话：导航栏按钮（一对一呼出 / 群聊预留入口）
     var callNav = pageEl.querySelector('[data-act="call"]');
     if (callNav) {
@@ -932,7 +846,6 @@ window.MineChat = (function () {
         if (window.MinePhone) MinePhone.openGroupCall(ctx.id);
       });
     }
-
     // 电话：with me 栏目（一对一呼出 / 群聊预留入口）
     var wmCall = pageEl.querySelector('[data-wm="call"]');
     if (wmCall) {
@@ -958,8 +871,6 @@ window.MineChat = (function () {
         }
       });
     }
-
-
     // 点击时间 → 切换日期/时间显示
     msgContainer.addEventListener("click", function (e) {
       var timeEl = e.target.closest(".time-text");
@@ -973,7 +884,6 @@ window.MineChat = (function () {
         timeEl.setAttribute("data-show", "time");
       }
     });
-
     // 点击对方头像 → 跳转到联系人主页
     msgContainer.addEventListener("click", function (e) {
       var tapEl = e.target.closest(".avatar-tap");
@@ -985,14 +895,12 @@ window.MineChat = (function () {
         MineContacts.openProfile(contactId, senderName);
       }
     });
-
     // 输入框自适应高度 + 启用发送按钮
     inputEl.addEventListener("input", function () {
       this.style.height = "auto";
       this.style.height = Math.min(this.scrollHeight, 120) + "px";
       sendBtn.disabled = !this.value.trim();
     });
-
     // Enter 发送（Shift+Enter 换行）
     inputEl.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -1000,36 +908,28 @@ window.MineChat = (function () {
         doSend();
       }
     });
-
     // 发送按钮
     sendBtn.addEventListener("click", doSend);
   }
-
   /* ---------------- 发送锁：移除（用输入框清空防重复即可） ---------------- */
-
   /* ---------------- 发送消息 ---------------- */
   function doSend() {
     var text = (inputEl.value || "").trim();
     if (!text) return;
-
     // 存储我的消息（未读状态）
     var msgs = conversations[ctx.convKey] || [];
     msgs.push({ id: uid(), from: "me", text: text, time: Date.now(), read: false });
     conversations[ctx.convKey] = msgs;
     save();
-
     // 清空输入并禁用按钮（防止重复发送）
     inputEl.value = "";
     inputEl.style.height = "auto";
     sendBtn.disabled = true;
-
     // 追加渲染
     appendMessage(msgs[msgs.length - 1]);
-
     // 触发对方回复
     scheduleReply();
   }
-
   /* ---------------- 追加单条消息 ---------------- */
   function appendMessage(msg) {
     var dateStr = fmtDateSep(msg.time);
@@ -1047,13 +947,11 @@ window.MineChat = (function () {
       sep.textContent = dateStr;
       msgContainer.appendChild(sep);
     }
-
     var row = document.createElement("div");
     row.innerHTML = msgRowHTML(msg);
     msgContainer.appendChild(row.firstChild);
     scrollToBottom();
   }
-
   /* ---------------- 将我的消息标记为已读并局部刷新 ---------------- */
   function markMyMessagesRead(convKey) {
     var key = convKey || ctx.convKey;
@@ -1069,7 +967,6 @@ window.MineChat = (function () {
       if (isViewingConv(key)) updateReadMarksUI();
     }
   }
-
   /* ---------------- 局部更新已读对勾 UI ---------------- */
   function updateReadMarksUI() {
     if (!msgContainer) return;
@@ -1087,7 +984,6 @@ window.MineChat = (function () {
       timeEl.insertBefore(check, timeEl.firstChild);
     });
   }
-
   /* ---------------- 对方回复（随机字卡） ----------------
      关键修复：在调度时捕获当前会话上下文（convKey/type/id），
      避免用户切换或退出聊天后 setTimeout 回调使用过期的 ctx
@@ -1096,12 +992,10 @@ window.MineChat = (function () {
   function scheduleReply() {
     // 确保通讯录数据已加载到内存
     if (C && C.loadData) C.loadData();
-
     // ★ 捕获当前会话上下文（防止用户退出/切换后 ctx 变化）
     var curConvKey = ctx.convKey;
     var curType = ctx.type;
     var curId = ctx.id;
-
     if (curType === "contact") {
       // 一对一
       var contact = C.findContact(curId);
@@ -1110,11 +1004,9 @@ window.MineChat = (function () {
         scheduleAutoReply(contact, null, curConvKey);
         return;
       }
-
       // 设定区间内的随机时间（0 ~ replyDelay 秒）
       var maxDelay = (contact && contact.replyDelay !== undefined) ? contact.replyDelay : 1.5;
       var actualDelay = Math.random() * maxDelay * 1000;
-
       if (actualDelay > 15000) {
         // 延迟较长：在回复前 15 秒显示"正在输入"（仅在查看该会话时显示）
         setTimeout(function () { if (isViewingConv(curConvKey)) showTyping(null); }, actualDelay - 15000);
@@ -1150,7 +1042,6 @@ window.MineChat = (function () {
       }
       var responders = allResponders.slice(0, Math.min(numReply, allResponders.length));
       if (responders.length === 0) return;
-
       var firstReply = true;
       responders.forEach(function (member) {
         // 1% 概率触发自动回复
@@ -1158,11 +1049,9 @@ window.MineChat = (function () {
           scheduleAutoReply(member, group, curConvKey);
           return;
         }
-
         // 设定区间内的随机时间
         var maxDelay = (member.replyDelay !== undefined) ? member.replyDelay : 1.5;
         var mDelay = Math.random() * maxDelay * 1000;
-
         (function (m, d) {
           function doReply() {
             if (isViewingConv(curConvKey)) hideTyping();
@@ -1231,7 +1120,6 @@ window.MineChat = (function () {
       });
     }
   }
-
   /* ---------------- 自动回复（1% 触发时） ----------------
      1% 触发未读通知，100% 使用自动回复字卡（无自动卡时回退普通卡）
      convKey: 调度时捕获的会话键，确保回复存入正确的会话 */
@@ -1243,11 +1131,9 @@ window.MineChat = (function () {
     }
     // 仍无任何字卡 → 保持沉默
     if (!card) return;
-
     var maxDelay = (contact && contact.replyDelay !== undefined) ? contact.replyDelay : 1.5;
     var actualDelay = Math.random() * maxDelay * 1000;
     var typingMember = group ? contact : null;
-
     if (actualDelay > 15000) {
       // 延迟较长：在回复前 15 秒显示"正在输入"
       setTimeout(function () { if (isViewingConv(convKey)) showTyping(typingMember); }, actualDelay - 15000);
@@ -1271,7 +1157,6 @@ window.MineChat = (function () {
       }, 0);
     }
   }
-
   function doAutoReply(contact, card, convKey) {
     var key = convKey || ctx.convKey;
     var msgs = conversations[key];
@@ -1318,7 +1203,6 @@ window.MineChat = (function () {
       }
     }
   }
-
   /* ---------------- 联系人回复执行 ---------------- */
   function doContactReply(contact, convKey) {
     var key = convKey || ctx.convKey;
@@ -1356,14 +1240,12 @@ window.MineChat = (function () {
       }
     }
   }
-
   /* ---------------- 输入指示 ---------------- */
   function showTyping(member) {
     hideTyping();
     var typing = document.createElement("div");
     typing.className = "msg-row";
     typing.id = "typing-indicator-row";
-
     // 若 member 为 null（一对一聊天），不显示头像
     // 若 member 存在但 findContact 可能失败，使用 member 自身信息
     var avatar = "";
@@ -1373,12 +1255,10 @@ window.MineChat = (function () {
       name = (ctx.type === "group") ?
         '<div class="msg-sender">' + escapeHtml(member.name || "未知") + '</div>' : "";
     }
-
     typing.innerHTML = avatar +
       '<div class="msg-content">' + name +
       '<div class="msg-bubble is-them"><div class="typing-indicator">' +
       '<span></span><span></span><span></span></div></div></div>';
-
     msgContainer.appendChild(typing);
     scrollToBottom();
   }
@@ -1386,223 +1266,6 @@ window.MineChat = (function () {
     var t = document.getElementById("typing-indicator-row");
     if (t) t.remove();
   }
-
-  /* ========================================================================
-     对方主动发消息
-     ------------------------------------------------------------------------
-     · 一对一：在联系人个人主页"回复设置 → 主动消息"开启并设定时间区间
-     · 群聊：每个成员按其个人设置独立计算（群 × 成员 各自计时）
-     · 触发时间：在 [最短间隔, 最长间隔] 内随机（1 分钟 ~ 12 小时）
-     · 触发时字卡条数：1条 60% / 2条 30% / 3条 7% / 3条以上 3%（抽 4~6 条）
-     · 每条字卡：90% 字符字卡 / 10% 图片字卡
-     · 字符字卡每条 15% 概率附加 1~3 条 emoji（73% / 20% / 7%，独立等概率抽取）
-     · 发送完毕后重新随机计时；倒计时持久化，刷新页面不重置
-     ======================================================================== */
-  var PROACTIVE_KEY = "mine.chat.proactive.v1";
-  var proactiveSched = {};    // { schedKey: 下次触发时间戳 }
-  var proactiveTimers = {};   // { schedKey: timeoutId }
-
-  function loadProactiveSched() {
-    try {
-      var raw = localStorage.getItem(PROACTIVE_KEY);
-      if (raw) proactiveSched = JSON.parse(raw) || {};
-    } catch (e) {}
-    if (!proactiveSched) proactiveSched = {};
-  }
-  function saveProactiveSched() {
-    try { localStorage.setItem(PROACTIVE_KEY, JSON.stringify(proactiveSched)); } catch (e) {}
-  }
-
-  /* 收集所有启用主动发消息的目标 */
-  function proactiveTargets() {
-    var targets = [];
-    if (!C || !C.getState) return targets;
-    var st = C.getState();
-    (st.contacts || []).forEach(function (c) {
-      if (!c.cards || c.cards.length === 0) return;
-      targets.push({
-        schedKey: "contact:" + c.id,
-        convKey: "contact:" + c.id,
-        type: "contact",
-        contact: c
-      });
-    });
-    (st.groups || []).forEach(function (g) {
-      var gHasCards = g.cards && g.cards.length > 0;
-      (g.members || []).forEach(function (mid) {
-        var m = null;
-        for (var i = 0; i < (st.contacts || []).length; i++) {
-          if (st.contacts[i].id === mid) { m = st.contacts[i]; break; }
-        }
-        if (!m) return;
-        if (!gHasCards && (!m.cards || m.cards.length === 0)) return;
-        targets.push({
-          schedKey: "group:" + g.id + "|" + m.id,
-          convKey: "group:" + g.id,
-          type: "group",
-          group: g,
-          member: m
-        });
-      });
-    });
-    return targets;
-  }
-
-  /* 在联系人的 [最短, 最长] 区间内随机取分钟数（1 分钟 ~ 12 小时） */
-  function proRandomMinutes(c) {
-    var min = parseInt(c.proactiveMin, 10); if (!(min >= 1)) min = 60;
-    var max = parseInt(c.proactiveMax, 10); if (!(max >= 1)) max = 720;
-    if (max < min) max = min;
-    return min + Math.floor(Math.random() * (max - min + 1));
-  }
-
-  /* 主动发消息字卡抽取：90% 字符字卡 / 10% 图片字卡（无字符卡时回退全池） */
-  function pickProactiveCard(pool) {
-    if (!pool || pool.length === 0) return null;
-    var images = filterImageCards(pool);
-    var texts = filterTextCards(pool);
-    if (images.length > 0 && Math.random() < 0.10) {
-      return images[Math.floor(Math.random() * images.length)];
-    }
-    if (texts.length > 0) return texts[Math.floor(Math.random() * texts.length)];
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-
-  /* 为某个目标调度主动发消息（delayMs 毫秒后触发；persist 是否持久化倒计时） */
-  function scheduleProactive(t, delayMs, persist) {
-    if (proactiveTimers[t.schedKey]) {
-      clearTimeout(proactiveTimers[t.schedKey]);
-      delete proactiveTimers[t.schedKey];
-    }
-    if (persist !== false) {
-      proactiveSched[t.schedKey] = Date.now() + delayMs;
-      saveProactiveSched();
-    }
-    proactiveTimers[t.schedKey] = setTimeout(function () {
-      delete proactiveTimers[t.schedKey];
-      // 触发时重新校验目标仍有效（可能已被删除或已关闭主动消息）
-      var targets = proactiveTargets();
-      var fresh = null;
-      for (var i = 0; i < targets.length; i++) {
-        if (targets[i].schedKey === t.schedKey) { fresh = targets[i]; break; }
-      }
-      if (!fresh) {
-        delete proactiveSched[t.schedKey];
-        saveProactiveSched();
-        return;
-      }
-      fireProactive(fresh);
-    }, Math.max(500, delayMs));
-  }
-
-  /* 执行一次主动发消息（条数 60/30/7/3 概率；发送完毕后重新计时） */
-  function fireProactive(t) {
-    // 会话数据可能尚未从 localStorage 载入（页面刚打开即触发）
-    if (!chatLoaded) load();
-    var contact = t.type === "contact" ? t.contact : t.member;
-    var pool = (contact.cards || []).slice();
-    if (t.type === "group" && t.group && t.group.cards) pool = pool.concat(t.group.cards);
-    if (pool.length === 0) return;
-
-    // 条数：1条 60% / 2条 30% / 3条 7% / 3条以上 3%（4~6 条）
-    var r = Math.random();
-    var count = r < 0.60 ? 1 : (r < 0.90 ? 2 : (r < 0.97 ? 3 : 4 + Math.floor(Math.random() * 3)));
-
-    var msgs = conversations[t.convKey] || [];
-    conversations[t.convKey] = msgs;
-    var beforeLen = msgs.length;
-    var senderName = (contact && contact.name) ? contact.name : "未知";
-    var senderAvatar = (contact && contact.avatar) ? contact.avatar : null;
-
-    for (var i = 0; i < count; i++) {
-      var card = pickProactiveCard(pool);
-      if (!card) break;
-      msgs.push({
-        id: uid(),
-        from: contact.id,
-        text: card,
-        time: Date.now(),
-        isProactive: true,
-        senderName: senderName,
-        senderAvatar: senderAvatar
-      });
-      // 字符字卡每条 15% 概率附加 1~3 条 emoji（独立等概率抽取）
-      if (!isImageCard(card) && !isEmojiCard(card)) {
-        var emojis = pickEmojiAttachments(pool);
-        for (var j = 0; j < emojis.length; j++) {
-          msgs.push({
-            id: uid(),
-            from: contact.id,
-            text: emojis[j],
-            time: Date.now(),
-            isProactive: true,
-            senderName: senderName,
-            senderAvatar: senderAvatar
-          });
-        }
-      }
-    }
-
-    if (msgs.length > beforeLen) {
-      save();
-      // 未查看时增加未读计数（类微信机制）
-      if (!isViewingConv(t.convKey)) {
-        incrementUnread(t.convKey);
-      }
-      // 对方发来消息后，将我的消息标记为已读
-      markMyMessagesRead(t.convKey);
-      // 仅在查看该会话时才追加 DOM（主消息 + emoji 附件）
-      if (isViewingConv(t.convKey)) {
-        for (var k = beforeLen; k < msgs.length; k++) {
-          appendMessage(msgs[k]);
-        }
-      }
-    }
-
-    // 发送完毕后重新触发（重新随机计时）
-    scheduleProactive(t, proRandomMinutes(contact) * 60000, true);
-  }
-
-  /* 初始化 / 刷新主动发消息调度（应用启动、设置变更、打开会话列表时调用） */
-  function initProactive() {
-    loadProactiveSched();
-    if (C && C.loadData) C.loadData();
-    var now = Date.now();
-    var seen = {};
-    proactiveTargets().forEach(function (t) {
-      seen[t.schedKey] = true;
-      var contact = t.type === "contact" ? t.contact : t.member;
-      var nextTs = proactiveSched[t.schedKey];
-      if (!nextTs) {
-        // 新开启：在区间内随机调度
-        scheduleProactive(t, proRandomMinutes(contact) * 60000, true);
-      } else if (nextTs <= now) {
-        // 页面关闭期间已到期：短暂延迟后补发
-        scheduleProactive(t, 3000 + Math.floor(Math.random() * 12000), true);
-      } else {
-        // 沿用持久化的倒计时
-        scheduleProactive(t, nextTs - now, true);
-      }
-    });
-    // 清理已删除 / 已关闭目标的倒计时
-    Object.keys(proactiveSched).forEach(function (k) {
-      if (!seen[k]) {
-        delete proactiveSched[k];
-        if (proactiveTimers[k]) { clearTimeout(proactiveTimers[k]); delete proactiveTimers[k]; }
-      }
-    });
-    saveProactiveSched();
-  }
-
-  /* 页面重新可见时补查已到期的主动消息（后台页签计时可能被浏览器节流） */
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") initProactive();
-  });
-  /* 后台保活：心跳检测到"时间跳跃"（后台被节流）后，回到前台时补查到期消息 */
-  document.addEventListener("mine:timeskip", function () {
-    if (document.visibilityState === "visible") initProactive();
-  });
-
   /* ========================================================================
      会话列表（聊天应用主页）
      ======================================================================== */
@@ -1610,18 +1273,14 @@ window.MineChat = (function () {
     load();
     // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
     if (C && C.loadData) C.loadData();
-    // 刷新主动发消息调度（拾取新建群等目标变化）
-    initProactive();
     if (!pageEl) pageEl = document.getElementById("page-chat");
     if (!pageEl) return;
-
     var navHtml =
       '<div class="nav-bar">' +
         '<button class="nav-btn" data-act="home">' + I.svg("back", 20) + '返回</button>' +
         '<span class="nav-title">聊天</span>' +
         '<span class="nav-right"></span>' +
       '</div>';
-
     // 收集所有有消息的会话
     var convs = [];
     Object.keys(conversations).forEach(function (key) {
@@ -1629,7 +1288,6 @@ window.MineChat = (function () {
       if (!msgs || msgs.length === 0) return;
       var lastMsg = msgs[msgs.length - 1];
       var title, avatarHTML, type, id;
-
       if (key.indexOf("contact:") === 0) {
         var c = C.findContact(key.substring(8));
         if (!c) return;
@@ -1643,12 +1301,9 @@ window.MineChat = (function () {
         avatarHTML = C.groupAvatarHTML(g, 48);
         type = "group"; id = g.id;
       } else return;
-
       // 图片消息在预览中显示"[图片]"
       var _isImg = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:image/") === 0;
-      var _isAud = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:audio/") === 0;
-      var _preview = _isImg ? "[图片]" : (_isAud ? "[语音]" : lastMsg.text);
-
+      var _preview = _isImg ? "[图片]" : lastMsg.text;
       convs.push({
         key: key, title: title, avatarHTML: avatarHTML,
         type: type, id: id,
@@ -1657,10 +1312,8 @@ window.MineChat = (function () {
         unread: getUnread(key)
       });
     });
-
     // 按最后消息时间排序
     convs.sort(function (a, b) { return b.lastTime - a.lastTime; });
-
     var bodyHtml = '<div class="scroll"><div class="conv-list">';
     if (convs.length === 0) {
       bodyHtml += '<div class="contacts-empty">' +
@@ -1690,9 +1343,7 @@ window.MineChat = (function () {
       });
     }
     bodyHtml += '</div></div>';
-
     pageEl.innerHTML = navHtml + bodyHtml;
-
     // 绑定
     pageEl.querySelector('[data-act="home"]').addEventListener("click", function () {
       if (window.MineApp && MineApp.goHome) MineApp.goHome();
@@ -1705,10 +1356,8 @@ window.MineChat = (function () {
         else openGroup(id);
       });
     });
-
     if (window.MineApp && MineApp.switchPage) MineApp.switchPage("chat");
   }
-
   /* ========================================================================
      抉择功能
      ------------------------------------------------------------------------
@@ -1717,7 +1366,6 @@ window.MineChat = (function () {
      ======================================================================== */
   var CHOICE_STORE_KEY = "mine.chat.choices.v1";
   var pendingChoices = {};  // { convKey: { question, options, submitTime } }
-
   function loadPendingChoices() {
     try {
       var raw = localStorage.getItem(CHOICE_STORE_KEY);
@@ -1728,23 +1376,18 @@ window.MineChat = (function () {
   function savePendingChoices() {
     try { localStorage.setItem(CHOICE_STORE_KEY, JSON.stringify(pendingChoices)); } catch (e) {}
   }
-
   function openChoiceDialog() {
     // 移除已有弹窗
     var existing = document.querySelector(".choice-overlay");
     if (existing) existing.remove();
-
     loadPendingChoices();
     var saved = pendingChoices[ctx.convKey];
-
     var question = (saved && saved.question) ? saved.question : "";
     var options = (saved && saved.options && saved.options.length > 0)
       ? saved.options.slice()
       : ["", ""];  // 默认 2 个选项
-
     var overlay = document.createElement("div");
     overlay.className = "choice-overlay";
-
     var html = '<div class="choice-dialog">' +
       '<div class="choice-header">' +
         '<span class="choice-title">抉择</span>' +
@@ -1757,35 +1400,28 @@ window.MineChat = (function () {
         '</textarea>' +
       '</div>' +
       '<div class="choice-options-section" id="choice-options-wrap">';
-
     for (var i = 0; i < options.length; i++) {
       html += buildOptionRow(i, options[i], options.length > 2);
     }
-
     html += '</div>' +
       '<div class="choice-footer">' +
         '<button class="choice-add-btn" id="choice-add-opt">' + I.svg("plus", 14) + '添加选项</button>' +
         '<button class="choice-submit-btn" id="choice-submit">保存并提交</button>' +
       '</div>' +
       '</div>';
-
     overlay.innerHTML = html;
     document.body.appendChild(overlay);
-
     // 触发动画
     requestAnimationFrame(function () { overlay.classList.add("is-open"); });
-
     // 关闭按钮
     overlay.querySelector("#choice-close").addEventListener("click", closeChoiceDialog);
     overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closeChoiceDialog();
     });
-
     // 添加选项按钮
     overlay.querySelector("#choice-add-opt").addEventListener("click", function () {
       addOptionRow();
     });
-
     // 删除选项按钮（事件委托）
     overlay.querySelector("#choice-options-wrap").addEventListener("click", function (e) {
       var delBtn = e.target.closest(".choice-option-del");
@@ -1798,11 +1434,9 @@ window.MineChat = (function () {
       row.remove();
       refreshOptionLabels();
     });
-
     // 保存并提交
     overlay.querySelector("#choice-submit").addEventListener("click", submitChoice);
   }
-
   /** 构建单个选项行 HTML */
   function buildOptionRow(index, value, canDelete) {
     var letter = String.fromCharCode(65 + index);
@@ -1814,7 +1448,6 @@ window.MineChat = (function () {
       (canDelete ? '<button class="choice-option-del" title="删除选项">' + I.svg("close", 12) + '</button>' : '') +
     '</div>';
   }
-
   /** 添加一行选项 */
   function addOptionRow() {
     var wrap = document.querySelector("#choice-options-wrap");
@@ -1828,7 +1461,6 @@ window.MineChat = (function () {
     var inputs = wrap.querySelectorAll(".choice-option-input");
     if (inputs[inputs.length - 1]) inputs[inputs.length - 1].focus();
   }
-
   /** 刷新所有选项行的字母标签和 placeholder */
   function refreshOptionLabels() {
     var wrap = document.querySelector("#choice-options-wrap");
@@ -1850,14 +1482,12 @@ window.MineChat = (function () {
       }
     });
   }
-
   function closeChoiceDialog() {
     var overlay = document.querySelector(".choice-overlay");
     if (!overlay) return;
     overlay.classList.remove("is-open");
     setTimeout(function () { overlay.remove(); }, 300);
   }
-
   function submitChoice() {
     var questionEl = document.getElementById("choice-question");
     var question = (questionEl.value || "").trim();
@@ -1866,7 +1496,6 @@ window.MineChat = (function () {
     optionInputs.forEach(function (el) {
       options.push((el.value || "").trim());
     });
-
     if (!question) {
       shakeElement(document.getElementById("choice-question"));
       return;
@@ -1877,7 +1506,6 @@ window.MineChat = (function () {
       if (firstInput) shakeElement(firstInput);
       return;
     }
-
     // 保存到持久化
     loadPendingChoices();
     pendingChoices[ctx.convKey] = {
@@ -1886,10 +1514,8 @@ window.MineChat = (function () {
       submitTime: Date.now()
     };
     savePendingChoices();
-
     // 关闭弹窗
     closeChoiceDialog();
-
     // 在聊天中发送抉择消息
     var choiceMsg = "【抉择】" + question + "\n";
     for (var j = 0; j < options.length; j++) {
@@ -1898,27 +1524,22 @@ window.MineChat = (function () {
       }
     }
     choiceMsg = choiceMsg.trimEnd();
-
     var msgs = conversations[ctx.convKey] || [];
     msgs.push({ id: uid(), from: "me", text: choiceMsg, time: Date.now(), read: false, isChoice: true });
     conversations[ctx.convKey] = msgs;
     save();
     appendMessage(msgs[msgs.length - 1]);
-
     // 对方在 5 分钟内随机选择并回复
     scheduleChoiceReply(filledOptions);
   }
-
   function scheduleChoiceReply(filledOptions) {
     // 捕获当前会话上下文（避免用户切换聊天后回复发错对话框）
     var curConvKey = ctx.convKey;
     var curType = ctx.type;
     var curId = ctx.id;
-
     // 随机延迟范围：10秒 ~ 5分钟
     var minDelay = 10000;
     var maxDelay = 5 * 60 * 1000;
-
     /** 发送单条抉择回复 */
     function sendChoiceReply(fromId, senderName, senderAvatar, delay) {
       setTimeout(function () {
@@ -1926,12 +1547,10 @@ window.MineChat = (function () {
         load();
         var msgs = conversations[curConvKey];
         if (!msgs) return;
-
         var pickedIdx = Math.floor(Math.random() * filledOptions.length);
         var picked = filledOptions[pickedIdx];
         var pickedLetter = String.fromCharCode(65 + pickedIdx);
         var replyText = "我选择 " + pickedLetter + "：" + picked;
-
         /* 在原始抉择消息上标注答案：找到最近一条我发送的 isChoice 消息 */
         for (var i = msgs.length - 1; i >= 0; i--) {
           if (msgs[i].isChoice && msgs[i].from === "me") {
@@ -1944,7 +1563,6 @@ window.MineChat = (function () {
             break;
           }
         }
-
         msgs.push({
           id: uid(),
           from: fromId,
@@ -1955,13 +1573,11 @@ window.MineChat = (function () {
           senderAvatar: senderAvatar
         });
         save();
-
         // 未查看时增加未读计数
         if (!isViewingConv(curConvKey)) {
           incrementUnread(curConvKey);
           if (window.MineNotify) MineNotify.refreshBadges();
         }
-
         // 只有当前正在查看该会话时才更新 UI
         if (isViewingConv(curConvKey)) {
           markMyMessagesRead();
@@ -1970,7 +1586,6 @@ window.MineChat = (function () {
         }
       }, delay);
     }
-
     if (curType === "contact") {
       // 一对一：对方一人回复
       var contact = C.findContact(curId);
@@ -1993,13 +1608,11 @@ window.MineChat = (function () {
       }
     }
   }
-
   function shakeElement(el) {
     if (!el) return;
     el.classList.add("shake");
     setTimeout(function () { el.classList.remove("shake"); }, 400);
   }
-
   /* ========================================================================
      注册页面钩子
      ======================================================================== */
@@ -2009,17 +1622,14 @@ window.MineChat = (function () {
     if (id === "chat") { openConvList(); return true; }
     return prevPage ? prevPage(id) : false;
   };
-
   /* ---------------- 搜索聊天记录 ---------------- */
   function searchHistory(convType, convId, opts) {
     var key = convType + ":" + convId;
     var msgs = conversations[key] || [];
     if (msgs.length === 0) return [];
-
     var keyword = (opts && opts.keyword) ? opts.keyword.trim().toLowerCase() : "";
     var dateStr = (opts && opts.date) ? opts.date.trim() : "";
     var results = [];
-
     msgs.forEach(function (msg, idx) {
       var match = true;
       // 关键词匹配
@@ -2058,7 +1668,6 @@ window.MineChat = (function () {
     });
     return results;
   }
-
   /* ---------------- 用户打开聊天应用时调用 ----------------
      仅清除主屏角标（appLevelSeen = true），保留各会话的未读计数
      （会话列表中的角标仍显示，直到用户点进具体会话） */
@@ -2066,15 +1675,33 @@ window.MineChat = (function () {
     appLevelSeen = true;
     if (window.MineNotify) MineNotify.refreshBadges();
   }
-
   /* ---------------- 注册 MineNotify provider ---------------- */
   if (window.MineNotify) {
     MineNotify.register("chat", getNotifyCount, clearAllUnread);
   }
-
-  /* ---------------- 启动对方主动发消息调度 ---------------- */
-  initProactive();
-
+  /* ========================================================================
+     系统通知联动
+     ------------------------------------------------------------------------
+     · 点击通知（页面内 / SW 转发）→ 跳转到对应会话
+     · 回前台汇总（保活模块广播）→ 轻提示"你不在的时候收到 N 条新消息"
+     ======================================================================== */
+  document.addEventListener("mine:notify-click", function (e) {
+    var d = e.detail || {};
+    var key = d.convKey;
+    if (!key) return;
+    try {
+      if (key.indexOf("contact:") === 0) openContact(key.substring(8));
+      else if (key.indexOf("group:") === 0) openGroup(key.substring(6));
+    } catch (err) {}
+  });
+  document.addEventListener("mine:notify-summary", function (e) {
+    var d = e.detail || {};
+    if (!d.total) return;
+    var text = "你不在的时候收到 " + d.total + " 条新消息";
+    if (d.calls) text += " · " + d.calls + " 次来电";
+    var fn = window.showToast || (window.MineUtils && MineUtils.showToast) || function () {};
+    try { fn(text); } catch (err) {}
+  });
   return {
     openContact: openContact,
     openGroup: openGroup,
@@ -2083,8 +1710,6 @@ window.MineChat = (function () {
     searchHistory: searchHistory,
     getTotalUnread: getTotalUnread,
     clearAllUnread: clearAllUnread,
-    refreshConvListBadges: openConvList,
-    // 设置变更后刷新主动发消息调度（供 contacts.js 调用）
-    refreshProactive: function () { initProactive(); }
+    refreshConvListBadges: openConvList
   };
 })();
