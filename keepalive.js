@@ -273,18 +273,71 @@ window.MineKeepalive = (function () {
   function notificationsSupported() {
     return typeof window.Notification !== "undefined";
   }
+  /* 安全上下文检测：Notification API 仅在 HTTPS（或 localhost）下可用 */
+  function isSecureCtx() {
+    try {
+      if (typeof window.isSecureContext === "boolean") return window.isSecureContext;
+      return location.protocol === "https:" ||
+             location.hostname === "localhost" ||
+             location.hostname === "127.0.0.1" ||
+             location.hostname === "[::1]";
+    } catch (e) { return false; }
+  }
+  /* iOS 检测：普通 Safari 网页无 Notification API，需添加到主屏幕以 PWA 运行 */
+  function isIOS() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+  }
+  function isStandalonePWA() {
+    try {
+      return navigator.standalone === true ||
+             (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    } catch (e) { return false; }
+  }
+  /* 权限状态 + 环境信息 + 针对性提示（供设置页"测试通知"展示） */
+  function getPermissionInfo() {
+    var supported = notificationsSupported();
+    var info = {
+      supported: supported,
+      permission: supported ? Notification.permission : "unsupported",
+      secure: isSecureCtx(),
+      ios: isIOS(),
+      standalone: isStandalonePWA(),
+      sw: "serviceWorker" in navigator,
+      hint: ""
+    };
+    if (!supported) {
+      if (info.ios && !info.standalone) {
+        info.hint = "iOS 浏览器普通网页无法使用网页通知：请用 Safari 打开本站，点分享按钮 →「添加到主屏幕」，从主屏幕图标进入后通知功能即可用。";
+      } else if (!info.secure) {
+        info.hint = "通知功能需要 HTTPS 安全连接（localhost 除外）。当前页面非安全连接，浏览器禁用了通知 API，请使用 HTTPS 地址访问本站。";
+      } else {
+        info.hint = "当前浏览器不支持网页通知（Notification API）。";
+      }
+    } else if (info.permission === "default") {
+      if (!info.secure) {
+        info.hint = "当前页面非 HTTPS 安全连接，通知权限可能无法生效：请用 https:// 地址访问本站后再测试。";
+      } else {
+        info.hint = "通知权限尚未授予：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许，然后重新测试。";
+      }
+    } else if (info.permission === "denied") {
+      info.hint = "通知权限被拒绝：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许；若浏览器设置已允许，请检查手机「系统设置 → 通知」是否允许该浏览器发送通知。";
+    }
+    return info;
+  }
+  /* 请求通知权限：default 时在用户手势内主动请求一次（返回当前状态字符串，异步结果由调用方按需处理） */
   function requestNotificationPermission() {
     if (!notificationsSupported()) return "unsupported";
     if (Notification.permission === "granted") return "granted";
     if (Notification.permission === "denied") return "denied";
     try {
       var r = Notification.requestPermission();
-      if (r && r.then) {
-        r.then(function (p) { return p; }, function () { return "error"; });
-        return "pending";
+      if (r && typeof r.then === "function") {
+        r.then(function () {}, function () {});
+        return Notification.permission || "default";
       }
+      if (typeof r === "string") return r;
     } catch (e) {}
-    return "default";
+    return Notification.permission || "default";
   }
   /* 通知去重指纹 */
   function normKey(s) {
@@ -546,26 +599,73 @@ window.MineKeepalive = (function () {
     }, 2000);
   }
 
-  /* ==================== 测试体检（设置页"测试"按钮） ==================== */
-  function testNotify() {
+  /* ==================== 测试体检（设置页"测试"按钮） ====================
+     同步返回当前状态；若权限为 default，会在用户手势内发起一次请求，
+     结果通过回调 cb(status) 异步返回（granted 后自动补发一条测试通知）。 */
+  function testNotify(cb) {
+    var info = getPermissionInfo();
     var status = {
-      sw: "serviceWorker" in navigator,
-      permission: notificationsSupported() ? Notification.permission : "unsupported",
+      sw: info.sw,
+      secure: info.secure,
+      ios: info.ios,
+      standalone: info.standalone,
+      supported: info.supported,
+      permission: info.permission,
+      hint: info.hint,
       prefs: getPrefs(),
       audioMode: audioMode,
       audioPlaying: audioMode === "media" ? !!keepAudio : !!(waCtx && waCtx.state === "running"),
       wakeLock: !!wakeLock,
       stall: stallCount,
-      queue: swQueue.length
+      queue: swQueue.length,
+      requesting: false,
+      sent: false
     };
-    // 权限已授予 → 真发一条测试通知
-    if (notificationsSupported() && Notification.permission === "granted") {
+    function sendTest() {
       var opts = { convKey: null, kind: "msg" };
       swNotify("Mine 测试通知", "后台保活与消息通知已就绪", opts);
       status.sent = true;
-    } else {
-      status.sent = false;
-      status.permissionHint = "通知权限未授予：请在浏览器地址栏图标 → 权限 → 通知 → 允许";
+      status.hint = "";
+    }
+    if (info.permission === "granted") {
+      sendTest();
+    } else if (info.permission === "default" && info.supported) {
+      /* 用户手势内主动请求权限（异步），结果刷新到 status */
+      status.requesting = true;
+      try {
+        var r = Notification.requestPermission();
+        if (r && typeof r.then === "function") {
+          r.then(function (p) {
+            status.requesting = false;
+            status.permission = p || Notification.permission || "default";
+            if (p === "granted") {
+              sendTest();
+            } else if (p === "denied") {
+              status.hint = "通知权限被拒绝：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许；若浏览器设置已允许，请检查手机「系统设置 → 通知」是否允许该浏览器。";
+            } else {
+              status.hint = "通知权限仍未授予：请在浏览器地址栏左侧图标 → 网站设置/权限 → 通知 → 允许，然后再次测试。";
+            }
+            if (cb) cb(status);
+          }, function () {
+            status.requesting = false;
+            if (cb) cb(status);
+          });
+        } else if (typeof r === "string") {
+          status.requesting = false;
+          status.permission = r;
+          if (r === "granted") sendTest();
+          if (cb) cb(status);
+        } else {
+          /* 老式/无返回值实现：以当前属性为准 */
+          status.requesting = false;
+          status.permission = Notification.permission || "default";
+          if (status.permission === "granted") sendTest();
+          if (cb) cb(status);
+        }
+      } catch (e) {
+        status.requesting = false;
+        if (cb) cb(status);
+      }
     }
     return status;
   }
