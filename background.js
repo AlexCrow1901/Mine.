@@ -11,16 +11,16 @@
 window.MineBackground = (function () {
   "use strict";
 
-  var ASSET = "assets/";
+  var ASSET = "";
   var STORE_KEY = "mine.bg.v1";
 
   // 预设列表
   var PRESETS = [
     { id: "none",   name: "雾境",   type: "none" },
-    { id: "london", name: "雾伦敦", type: "image", value: ASSET + "bg-london.jpg",
-      thumb: ASSET + "bg-london.jpg" },
-    { id: "forest", name: "雾林",   type: "image", value: ASSET + "bg-forest.jpg",
-      thumb: ASSET + "bg-forest.jpg" },
+    { id: "london", name: "雾伦敦", type: "image", value: ASSET + "bg-london(1).jpg",
+      thumb: ASSET + "bg-london(1).jpg" },
+    { id: "forest", name: "雾林",   type: "image", value: ASSET + "bg-forest(1).jpg",
+      thumb: ASSET + "bg-forest(1).jpg" },
     { id: "lead",   name: "铅灰",   type: "gradient",
       value: "linear-gradient(160deg,#3a4045 0%,#2b3034 50%,#1d2124 100%)",
       thumb: "linear-gradient(160deg,#3a4045,#1d2124)" },
