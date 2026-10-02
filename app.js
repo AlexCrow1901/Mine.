@@ -1,4 +1,4 @@
- /* ========================================================================
+/* ========================================================================
    Mine · 应用主逻辑
    ------------------------------------------------------------------------
    · 应用注册表（图标 / 标签 / 行为）—— 后续扩展直接在此追加
@@ -7,10 +7,8 @@
    · 页面切换（Home ↔ 详情占位页）
    · 预留扩展：APP.page() 钩子，供后续聊天 / API / MCP 接入
    ======================================================================== */
-
 (function () {
   "use strict";
-
   /* ---------------- 应用注册表 ----------------
      page: 跳转到同名占位页；action:'background' 打开背景管理。
      后续新增功能：在此添加条目，并实现对应 page 钩子即可。 */
@@ -24,14 +22,12 @@
     { id: "settings",   icon: "settings",   label: "设置" },
     { id: "weather",    icon: "weather",    label: "天气" }
   ];
-
   var DOCK = [
     { id: "phone",   icon: "phone",   label: "电话" },
     { id: "chat",    icon: "chat",    label: "聊天" },
     { id: "browser", icon: "browser", label: "浏览" },
     { id: "me",      icon: "me",      label: "我" }
   ];
-
   /* ---------------- 占位页文案（后续替换为真实功能） ----------------
      contacts 已由 contacts.js 通过 MineApp.page 钩子接管，下方仅作兜底。
      chat 已由 chat.js 通过 MineApp.page 钩子接管，下方仅作兜底。 */
@@ -48,14 +44,11 @@
     browser:  { title: "浏览",   icon: "browser",  desc: "浏览器尚未启用。" },
     me:       { title: "我",     icon: "me",       desc: "个人中心建设中。" }
   };
-
   /* ---------------- 公共扩展命名空间 ----------------
      后续模块可挂载：APP.page = function(id){ ... }  返回 true 表示已处理 */
   var APP = window.MineApp = window.MineApp || {};
-
   /* ---------------- DOM 引用 ---------------- */
   var dom = {};
-
   /* ---------------- 渲染主屏图标 ---------------- */
   function cellHTML(app) {
     var accent = app.accent ? " accent" : "";
@@ -71,11 +64,9 @@
       '<div class="app-icon">' + window.MineIcons.svg(app.icon, 25) + '</div>' + badge +
       '</div>';
   }
-
   function renderHome() {
     dom.grid.innerHTML = APPS.map(cellHTML).join("");
     dom.dock.innerHTML = DOCK.map(dockCellHTML).join("");
-
     // 绑定点击
     document.querySelectorAll(".app-cell").forEach(function (cell) {
       cell.addEventListener("click", function () { onAppTap(cell.getAttribute("data-app")); });
@@ -84,7 +75,6 @@
       });
     });
   }
-
   /* ---------------- 应用点击 ---------------- */
   function onAppTap(appId) {
     var app = findApp(appId);
@@ -99,13 +89,11 @@
     if (typeof APP.page === "function" && APP.page(appId) === true) return;
     openPlaceholder(appId);
   }
-
   function findApp(id) {
     var all = APPS.concat(DOCK);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
-
   /* ---------------- 详情占位页 ---------------- */
   function openPlaceholder(appId) {
     var info = PLACEHOLDER[appId] || { title: appId, icon: "eye", desc: "敬请期待。" };
@@ -122,21 +110,17 @@
         '<div class="empty-title">' + info.title + '</div>' +
         '<div class="empty-desc">' + desc + '</div>' +
       '</div></div>';
-
     dom.detail.innerHTML = navBar + body;
     dom.detail.querySelector('[data-act="back"]').addEventListener("click", goHome);
     switchPage("detail");
   }
-
   function goHome() { switchPage("home"); }
-
   /* ---------------- 页面切换 ---------------- */
   function switchPage(name) {
     document.querySelectorAll(".page").forEach(function (p) {
       p.classList.toggle("is-active", p.getAttribute("data-page") === name);
     });
   }
-
   /* ---------------- 状态栏时钟 ---------------- */
   function updateClock() {
     var now = new Date();
@@ -144,7 +128,6 @@
     var m = now.getMinutes();
     dom.time.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
   }
-
   function updateGreeting() {
     var now = new Date();
     var week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][now.getDay()];
@@ -171,7 +154,6 @@
     if (dom.date) dom.date.textContent =
       (now.getMonth() + 1) + "月" + now.getDate() + "日 · " + week;
   }
-
   /* ---------------- 长按主屏呼出背景管理 ---------------- */
   function bindLongPress() {
     var timer = null;
@@ -191,7 +173,6 @@
     grid.addEventListener("mouseleave", cancel);
     grid.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   }
-
   /* ---------------- 初始化 ---------------- */
   function init() {
     dom.grid = document.getElementById("app-grid");
@@ -201,15 +182,12 @@
     dom.time = document.getElementById("status-time");
     dom.hello = document.querySelector(".greeting .hello");
     dom.date = document.querySelector(".greeting .date");
-
     renderHome();
     updateClock();
     updateGreeting();
     bindLongPress();
-
     setInterval(updateClock, 20000);
     setInterval(updateGreeting, 60000);
-
     // 背景管理器初始化
     if (window.MineBackground) window.MineBackground.init();
     // 个人中心初始化
@@ -220,19 +198,15 @@
     if (window.MineTreeHole) window.MineTreeHole.init();
     // 电话模块初始化（启动联系人主动来电调度）
     if (window.MinePhone) window.MinePhone.init();
-
-
     // ===== 注册 MineNotify provider =====
     if (window.MineNotify) {
       // chat provider 已在 chat.js 中注册
-
       // moments provider：基于时间戳统计新互动数
       if (window.MineMoments) {
         MineNotify.register("moments", function () {
           return MineMoments.getUnreadCount();
         });
       }
-
       // companion 聚合 provider：次元信箱 + 深夜树洞的未读总数
       // 不注册 onSeen 回调：用户打开陪伴页时不清除未读，
       // 角标保留到用户点进具体子应用（time-mailbox / night-whispers）才清除
@@ -246,7 +220,6 @@
           }
         );
       }
-
       // 陪伴页子卡片单独 provider（卡片角标）
       if (window.MineMail) {
         MineNotify.register("time-mailbox",
@@ -260,19 +233,16 @@
           function () { MineTreeHole.clearUnread(); }
         );
       }
-
       // 初始刷新角标
       MineNotify.refreshBadges();
     }
   }
-
   /* ---------------- 公共方法 ---------------- */
   APP.goHome = goHome;
   APP.switchPage = switchPage;
   APP.openPlaceholder = openPlaceholder;
   APP.refreshGreeting = updateGreeting;
-
-  // 个人中心 / 电话页 / 文件管理 / 设置页 页面钩子（链式：保存前一个 page handler）
+   // 个人中心 / 电话页 / 文件管理 / 设置页 页面钩子（链式：保存前一个 page handler）
   var prevPage = APP.page;
   APP.page = function (id) {
     if (id === "settings" && window.MineSettings) {
@@ -297,8 +267,6 @@
     }
     return prevPage ? prevPage(id) : false;
   };
-
-
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
