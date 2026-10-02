@@ -17,16 +17,16 @@
     { id: "contacts",   icon: "contacts",   label: "通讯录" },
     { id: "companion",  icon: "discover",   label: "陪伴" },
     { id: "moments",    icon: "moments",    label: "朋友圈" },
-    { id: "files",      icon: "files",      label: "文件" },
-    { id: "background", icon: "background", label: "背景", accent: true, action: "background" },
     { id: "settings",   icon: "settings",   label: "设置" },
     { id: "weather",    icon: "weather",    label: "天气" }
   ];
+  /* ---------------- 底部导航（微信风格：通讯录 / 陪伴 / 个人中心 / 设置） ----------------
+     底部四个主 tab 常驻；聊天 / 朋友圈 / 文件等入口保留在主屏网格。 */
   var DOCK = [
-    { id: "phone",   icon: "phone",   label: "电话" },
-    { id: "chat",    icon: "chat",    label: "聊天" },
-    { id: "browser", icon: "browser", label: "浏览" },
-    { id: "me",      icon: "me",      label: "我" }
+    { id: "contacts",  icon: "contacts",  label: "通讯录" },
+    { id: "companion", icon: "discover",  label: "陪伴" },
+    { id: "me",        icon: "me",        label: "个人中心" },
+    { id: "settings",  icon: "settings",  label: "设置" }
   ];
   /* ---------------- 占位页文案（后续替换为真实功能） ----------------
      contacts 已由 contacts.js 通过 MineApp.page 钩子接管，下方仅作兜底。
@@ -60,18 +60,35 @@
   }
   function dockCellHTML(app) {
     var badge = window.MineNotify ? MineNotify.badgeHTML(app.id) : "";
-    return '<div class="app-cell" role="button" tabindex="0" data-app="' + app.id + '">' +
-      '<div class="app-icon">' + window.MineIcons.svg(app.icon, 25) + '</div>' + badge +
+    return '<div class="dock-cell" role="button" tabindex="0" data-app="' + app.id + '">' +
+      '<div class="dock-icon">' + window.MineIcons.svg(app.icon, 24) + '</div>' + badge +
+      '<span class="dock-label">' + app.label + '</span>' +
       '</div>';
+  }
+  /* 底部导航选中高亮 */
+  function setDockActive(id) {
+    document.querySelectorAll(".dock-cell").forEach(function (c) {
+      c.classList.toggle("is-active", c.getAttribute("data-app") === id);
+    });
   }
   function renderHome() {
     dom.grid.innerHTML = APPS.map(cellHTML).join("");
     dom.dock.innerHTML = DOCK.map(dockCellHTML).join("");
-    // 绑定点击
-    document.querySelectorAll(".app-cell").forEach(function (cell) {
+    // 绑定网格点击
+    document.querySelectorAll(".app-grid .app-cell").forEach(function (cell) {
       cell.addEventListener("click", function () { onAppTap(cell.getAttribute("data-app")); });
       cell.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAppTap(cell.getAttribute("data-app")); }
+      });
+    });
+    // 绑定底部导航点击
+    document.querySelectorAll(".dock .dock-cell").forEach(function (cell) {
+      cell.addEventListener("click", function () {
+        setDockActive(cell.getAttribute("data-app"));
+        onAppTap(cell.getAttribute("data-app"));
+      });
+      cell.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDockActive(cell.getAttribute("data-app")); onAppTap(cell.getAttribute("data-app")); }
       });
     });
   }
@@ -114,7 +131,7 @@
     dom.detail.querySelector('[data-act="back"]').addEventListener("click", goHome);
     switchPage("detail");
   }
-  function goHome() { switchPage("home"); }
+  function goHome() { setDockActive(""); switchPage("home"); }
   /* ---------------- 页面切换 ---------------- */
   function switchPage(name) {
     document.querySelectorAll(".page").forEach(function (p) {
