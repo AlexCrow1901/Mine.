@@ -290,6 +290,12 @@ window.MineSettings = (function () {
       if (st.ios !== undefined) {
         lines.push("iOS 环境：" + (st.ios ? (st.standalone ? "PWA 模式" : "普通网页（通知需添加到主屏幕）") : "否"));
       }
+      if (st.psync) {
+        var psyncText = st.psync.supported
+          ? (st.psync.standalone ? "可用（页面全关后也会定期补发）" : "需先从桌面图标打开后启用")
+          : "不支持（需 Chromium 内核 + 添加到主屏幕）";
+        lines.push("离线提醒(PSYNC)：" + psyncText);
+      }
       lines.push("保活通道：" + (st.audioMode === "wa" ? "WebAudio（不抢声音）" : "媒体元素"));
       lines.push("保活播放中：" + (st.audioPlaying ? "是" : "否"));
       lines.push("屏幕常亮：" + (st.wakeLock ? "是" : "否"));
