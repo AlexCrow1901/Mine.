@@ -62,8 +62,18 @@ window.MineNetease = (function () {
   function jget(path) {
     var base = apiUrl();
     if (!base) return Promise.reject(new Error("no-api"));
-    return fetch(base + path + (path.indexOf("?") >= 0 ? "&" : "?") + "timestamp=" + Date.now())
-      .then(function (r) { return r.json(); });
+    var url = base + path + (path.indexOf("?") >= 0 ? "&" : "?") + "timestamp=" + Date.now();
+    /* 8 秒超时：避免手机网络连不上 API 时"点了没反应"（请求挂起无反馈） */
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error("timeout")); }, 8000);
+      fetch(url).then(function (r) {
+        clearTimeout(timer);
+        return r.json();
+      }).then(function (d) { resolve(d); }, function (e) {
+        clearTimeout(timer);
+        reject(e);
+      });
+    });
   }
 
   /* ---------------- 面板渲染 ---------------- */
@@ -163,6 +173,7 @@ window.MineNetease = (function () {
   /* ---------------- 扫码登录 ---------------- */
   function startQrLogin() {
     if (!apiUrl()) { toast("请先填写并保存 API 地址"); return; }
+    toast("正在获取登录二维码…");
     jget("/login/qr/key").then(function (d) {
       if (!d || !d.data || !d.data.unikey) { toast("获取二维码失败，请检查 API 地址"); return; }
       var key = d.data.unikey;
@@ -170,7 +181,10 @@ window.MineNetease = (function () {
         if (!cd || !cd.data || !cd.data.qrimg) { toast("二维码生成失败"); return; }
         showQr(cd.data.qrimg, key);
       });
-    }).catch(function () { toast("API 连接失败，请检查地址与网络"); });
+    }).catch(function (e) {
+      if (e && e.message === "timeout") toast("连接超时：当前网络无法访问 API，请检查地址或更换网络");
+      else toast("API 连接失败，请检查地址与网络");
+    });
   }
 
   function showQr(qrimg, key) {
