@@ -869,8 +869,9 @@ window.MineChat = (function () {
     applyChatFontColor();
     // 绑定事件
     bindChatEvents();
-    // 滚到底部
-    scrollToBottom();
+    // 滚到底部（首次打开强制）
+    scrollToBottom(true);
+    hideBackBottom();
   }
   /* ---------------- 渲染所有消息 ---------------- */
   function renderMessages() {
@@ -886,7 +887,7 @@ window.MineChat = (function () {
       html += msgRowHTML(msg);
     });
     msgContainer.innerHTML = html;
-    scrollToBottom();
+    scrollToBottom(true);
   }
   /* ---------------- 单条消息 HTML ---------------- */
   function msgRowHTML(msg) {
@@ -977,11 +978,48 @@ window.MineChat = (function () {
       (isMe ? avatarHTML : "") +
       '</div>';
   }
-  /* ---------------- 滚到底部 ---------------- */
-  function scrollToBottom() {
+  /* ---------------- 滚动控制（不打扰用户翻历史） ----------------
+     · 仅在用户位于底部附近时自动跟随新消息滚到底部
+     · 用户正在向上翻历史时，保持滚动位置不动，并显示"回到底部"按钮 */
+  var SCROLL_THRESHOLD = 120;  /* 距底部小于该值视为"在底部附近" */
+  var backBottomBtn = null;
+
+  function isNearBottom() {
+    if (!msgContainer) return true;
+    return (msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight) < SCROLL_THRESHOLD;
+  }
+
+  function scrollToBottom(force) {
     requestAnimationFrame(function () {
-      if (msgContainer) msgContainer.scrollTop = msgContainer.scrollHeight;
+      if (!msgContainer) return;
+      if (force || isNearBottom()) {
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+        hideBackBottom();
+      } else {
+        showBackBottom();
+      }
     });
+  }
+
+  function ensureBackBottomBtn() {
+    if (!msgContainer) return null;
+    if (backBottomBtn && backBottomBtn.isConnected) return backBottomBtn;
+    backBottomBtn = document.createElement("button");
+    backBottomBtn.className = "chat-back-bottom";
+    backBottomBtn.innerHTML = I.svg("back", 20);
+    backBottomBtn.setAttribute("aria-label", "回到底部");
+    backBottomBtn.addEventListener("click", function () {
+      scrollToBottom(true);
+    });
+    document.body.appendChild(backBottomBtn);
+    return backBottomBtn;
+  }
+  function showBackBottom() {
+    var b = ensureBackBottomBtn();
+    if (b) b.classList.add("is-show");
+  }
+  function hideBackBottom() {
+    if (backBottomBtn) backBottomBtn.classList.remove("is-show");
   }
   /* ========================================================================
      绑定事件
@@ -1052,6 +1090,11 @@ window.MineChat = (function () {
         }
       });
     }
+    // 用户滚动消息区：离开底部时显示"回到底部"，回到底部时隐藏
+    msgContainer.addEventListener("scroll", function () {
+      if (isNearBottom()) hideBackBottom();
+      else showBackBottom();
+    });
     // 点击时间 → 切换日期/时间显示
     msgContainer.addEventListener("click", function (e) {
       var timeEl = e.target.closest(".time-text");
@@ -1457,6 +1500,7 @@ window.MineChat = (function () {
      ======================================================================== */
   function openConvList() {
     load();
+    hideBackBottom();
     // 确保通讯录数据已加载到内存（可能页面刷新后未加载）
     if (C && C.loadData) C.loadData();
     if (!pageEl) pageEl = document.getElementById("page-chat");

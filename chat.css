@@ -863,6 +863,42 @@
 }
 .chat-messages::-webkit-scrollbar { width: 0; }
 
+/* 回到底部按钮：仅当用户翻历史离开底部时显示，不打扰滚动 */
+.chat-back-bottom {
+  position: fixed;
+  right: max(16px, calc((100vw - var(--app-max-w)) / 2 + 16px));
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-3);
+  backdrop-filter: blur(var(--blur-sm)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--blur-sm)) saturate(1.15);
+  border: 1px solid var(--bd-strong);
+  box-shadow: var(--sh-float);
+  color: var(--t-secondary);
+  z-index: 900;
+  opacity: 0;
+  visibility: hidden;
+  transform: rotate(90deg) scale(0.82);
+  transition: opacity var(--dur-mid) var(--ease-soft),
+              transform var(--dur-mid) var(--ease-soft),
+              visibility 0s linear var(--dur-mid);
+}
+.chat-back-bottom.is-show {
+  opacity: 1;
+  visibility: visible;
+  transform: rotate(90deg) scale(1);
+}
+.chat-back-bottom:active {
+  transform: rotate(90deg) scale(0.9);
+  background: var(--glass-press);
+}
+.chat-back-bottom svg { width: 20px; height: 20px; }
+
 /* 日期分隔 */
 .chat-date-sep {
   text-align: center;
