@@ -23,15 +23,70 @@ window.MineSettings = (function () {
     return M && M.svg ? M.svg(name, size) : "";
   }
   var SETTINGS_KEY = "mine.settings.v1";
-  var ICON_KEY = "mine.icon.v1";
+  var ICON_KEY = "mine.icon.v1";            // 预览用（localStorage 镜像）
+  var ICON_IDB = "mine-icon";               // SW 可读的真实存储（同源 IndexedDB）
+  var ICON_IDB_KEY = "mine.icon.custom.v1";
   var prefs = { notify: true, background: true, nodedup: false, noduck: true };
 
   /* ============ 应用图标自定义（PWA 桌面图标） ============
-     为保证应用可安装为独立 App（Chrome 只认可静态 manifest.json 上的图标，
-     动态 blob manifest 会导致无法安装），自定义桌面图标采用"导出替换"方案：
-     上传 → 应用内预览 + 导出 PNG → 用导出的文件替换仓库 icons/ 下同名文件
-     并重新部署 → 重新"添加到主屏幕"后桌面图标即更新。
-     上传的自定义图标仅存本地用于预览，不修改 manifest。 */
+     新版方案（网站内上传即生效，无需替换仓库文件 / 无需重新添加主屏幕）：
+     上传 → 压缩为 512px PNG → 写入 IndexedDB（SW 与页面同源共享）
+     → ① 应用内图标立即更新；
+     → ② SW 拦截 icons/ 请求返回自定义图（manifest 保持静态可安装）；
+     → ③ 动态给 manifest link 加版本戳，浏览器感知后自动同步已安装应用图标。 */
+  function iconIdbOpen(cb) {
+    try {
+      var req = indexedDB.open(ICON_IDB, 1);
+      req.onupgradeneeded = function () {
+        try {
+          if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+        } catch (e) {}
+      };
+      req.onsuccess = function () { cb(req.result); };
+      req.onerror = function () { cb(null); };
+    } catch (e) { cb(null); }
+  }
+  function iconIdbSet(dataUrl, cb) {
+    iconIdbOpen(function (db) {
+      if (!db) { if (cb) cb(); return; }
+      try {
+        var tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(dataUrl, ICON_IDB_KEY);
+        tx.oncomplete = function () { try { db.close(); } catch (e) {} if (cb) cb(); };
+        tx.onerror = function () { try { db.close(); } catch (e) {} if (cb) cb(); };
+      } catch (e) { if (cb) cb(); }
+    });
+  }
+  function iconIdbGet(cb) {
+    iconIdbOpen(function (db) {
+      if (!db) { if (cb) cb(null); return; }
+      try {
+        var tx = db.transaction("kv", "readonly");
+        var rq = tx.objectStore("kv").get(ICON_IDB_KEY);
+        rq.onsuccess = function () { try { db.close(); } catch (e) {} cb(rq.result || null); };
+        rq.onerror = function () { try { db.close(); } catch (e) {} cb(null); };
+      } catch (e) { cb(null); }
+    });
+  }
+  function iconIdbDelete(cb) {
+    iconIdbOpen(function (db) {
+      if (!db) { if (cb) cb(); return; }
+      try {
+        var tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").delete(ICON_IDB_KEY);
+        tx.oncomplete = function () { try { db.close(); } catch (e) {} if (cb) cb(); };
+        tx.onerror = function () { try { db.close(); } catch (e) {} if (cb) cb(); };
+      } catch (e) { if (cb) cb(); }
+    });
+  }
+  /* manifest link 加版本戳：让浏览器感知图标变化并同步已安装应用（无需重新添加主屏幕） */
+  function bumpManifestVersion() {
+    try {
+      var link = document.querySelector('link[rel="manifest"]');
+      if (!link) return;
+      link.href = "manifest.json?v=" + Date.now();
+    } catch (e) {}
+  }
   function getCustomIcon() {
     try { return localStorage.getItem(ICON_KEY) || null; } catch (e) { return null; }
   }
@@ -59,27 +114,33 @@ window.MineSettings = (function () {
     if (!data) return;
     downloadPng(data, size === 512 ? "icon-512.png" : "icon-192.png", size);
   }
-  /* 上传图片 → 压缩为 512px dataURL → 仅本地存储与预览 */
+  /* 上传图片 → 压缩为 512px PNG → 写入 IndexedDB（SW 代理即时生效）→ 应用内立即生效 */
   function applyCustomIcon(file) {
     if (!file || !/^image\//.test(file.type)) return;
-    if (window.MineUtils && MineUtils.compressImage) {
-      MineUtils.compressImage(file, 512, 0.9, function (dataURL) {
-        if (!dataURL) return;
-        try { localStorage.setItem(ICON_KEY, dataURL); } catch (e) {}
+    var done = function (dataURL) {
+      if (!dataURL) return;
+      try { localStorage.setItem(ICON_KEY, dataURL); } catch (e) {}
+      iconIdbSet(dataURL, function () {
+        bumpManifestVersion(); // 触发浏览器感知 manifest 变化 → 自动同步已安装桌面图标
         renderPage();
+        toast("图标已应用：应用内立即生效；桌面图标将在浏览器同步后自动更新（个别机型未自动更新时，重新添加到主屏幕一次即永久生效）");
       });
+    };
+    if (window.MineUtils && MineUtils.compressImage) {
+      MineUtils.compressImage(file, 512, 0.9, done);
     } else {
       var reader = new FileReader();
-      reader.onload = function () {
-        try { localStorage.setItem(ICON_KEY, reader.result); } catch (e) {}
-        renderPage();
-      };
+      reader.onload = function () { done(reader.result); };
       reader.readAsDataURL(file);
     }
   }
   function resetCustomIcon() {
     try { localStorage.removeItem(ICON_KEY); } catch (e) {}
-    renderPage();
+    iconIdbDelete(function () {
+      bumpManifestVersion();
+      renderPage();
+      toast("已恢复默认图标");
+    });
   }
   /* ---------------- 持久化 ---------------- */
   function load() {
@@ -116,6 +177,14 @@ window.MineSettings = (function () {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace( />/g, "&gt;").replace(/"/g, "&quot;");
   }
+  /* 页面加载：若有自定义图标 → manifest 加版本戳，让浏览器持续感知并同步已安装桌面图标 */
+  (function () {
+    setTimeout(function () {
+      iconIdbGet(function (data) {
+        if (data) bumpManifestVersion();
+      });
+    }, 600);
+  })();
   /* ---------------- 渲染设置页 ---------------- */
   function renderPage() {
     load();
@@ -154,7 +223,7 @@ window.MineSettings = (function () {
     // 应用图标自定义
     html += '<div class="group-head">应用图标</div>';
     html += iconCard();
-    html += '<div class="card-hint">自定义桌面图标：上传图片 → 导出 PNG → 替换仓库 icons/icon-512.png（与 icon-192.png）→ 重新部署 → 重新"添加到主屏幕"后生效。为保证可安装为独立应用，安装始终使用静态 manifest.json 中的图标。</div>';
+    html += '<div class="card-hint">自定义桌面图标：上传图片即可，网站内即时生效，无需替换仓库文件、无需重新部署。桌面图标由浏览器自动同步（首次未自动更新时，重新"添加到主屏幕"一次即永久生效）。</div>';
     html += '<div class="card-hint">关闭"消息通知"后将不再弹出系统通知；关闭"后台运行"可节省电量，但后台活跃度会下降。受手机系统省电机制限制，网页后台保活尽力而为。</div>';
     html += '<div class="card-hint">聊天记录与朋友圈数据存储于本地，刷新、关闭、更新网站均不会丢失。</div>';
     html += '<div class="card-hint">若收不到通知：① 浏览器地址栏图标 → 权限 → 通知 → 允许；② 手机系统"设置 → 通知"允许该浏览器；③ 勿开启勿扰模式；④ Chrome 可把本站加入"始终保持活动"。</div>';
@@ -189,7 +258,7 @@ window.MineSettings = (function () {
       '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">桌面图标</span>' +
-        '<span class="func-sub">' + (custom ? "已上传自定义图标（导出替换文件后生效）" : "当前为内置 Mine 图标") + '</span>' +
+        '<span class="func-sub">' + (custom ? "已上传自定义图标（网站内即时生效，桌面图标浏览器自动同步）" : "当前为内置 Mine 图标（上传图片即可自定义）") + '</span>' +
       '</div>' +
       '<button class="chat-bg-btn" id="set-icon-upload" style="flex:none;">' +
         (custom ? "更换" : "选择图片") + '</button>' +
@@ -199,8 +268,8 @@ window.MineSettings = (function () {
       html += '<div class="func-row" style="border-top:none;">' +
         '<div class="func-icon">' + iconSvg("download", 20) + '</div>' +
         '<div class="func-text">' +
-          '<span class="func-title">导出图标文件</span>' +
-          '<span class="func-sub">下载 PNG 后替换仓库 icons/ 目录同名文件并重新部署</span>' +
+          '<span class="func-title">导出图标文件（可选）</span>' +
+          '<span class="func-sub">高级用法：下载 PNG 后也可替换仓库 icons/ 目录同名文件，让所有访客都看到你的图标</span>' +
         '</div>' +
         '<button class="chat-bg-btn" id="set-icon-dl512" style="flex:none;">下载 512</button>' +
         '<button class="chat-bg-btn" id="set-icon-dl192" style="flex:none;margin-left:6px;">下载 192</button>' +
