@@ -26,15 +26,15 @@ window.MineTheme = (function () {
   var THEMES = [
     {
       key: "fog",
-      name: "伦敦雾都",
-      desc: "炭黑冷调 · 维多利亚阴郁美学",
-      bodyClass: "",
+      name: "黑夜",
+      desc: "纯黑背景",
+      bodyClass: "theme-night",
       swatchClass: "fog"
     },
     {
       key: "neumorphism",
-      name: "奶油软拟态",
-      desc: "暖奶油米白 · 柔和双重软阴影",
+      name: "白天",
+      desc: "奶油软拟态",
       bodyClass: "theme-neumorphism",
       swatchClass: "neumorphism"
     }
@@ -550,8 +550,8 @@ window.MineTheme = (function () {
     /* 注入新拟态首页 HTML */
     injectNeuHomeHTML();
 
-    /* 构建主题切换按钮 */
-    buildSwitchButton();
+    /* 右上角圆形主题切换按钮已移除：
+       白天 | 黑夜 模式已合并进"个人中心 → 背景"面板（background.js setMode） */
 
     /* 加载保存的主题 */
     loadTheme();
