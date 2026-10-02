@@ -152,18 +152,37 @@ window.MineSettings = (function () {
     if (testBtn && resultEl) {
       testBtn.addEventListener("click", function () {
         if (!window.MineKeepalive) { resultEl.innerHTML = '<div class="card-hint">保活模块未加载</div>'; return; }
-        var st = MineKeepalive.testNotify();
-        var lines = [];
-        lines.push("Service Worker 通道：" + (st.sw ? "可用" : "不可用"));
-        lines.push("通知权限：" + st.permission);
-        lines.push("保活通道：" + (st.audioMode === "wa" ? "WebAudio（不抢声音）" : "媒体元素"));
-        lines.push("保活播放中：" + (st.audioPlaying ? "是" : "否"));
-        lines.push("屏幕常亮：" + (st.wakeLock ? "是" : "否"));
-        if (st.permissionHint) lines.push(st.permissionHint);
-        lines.push(st.sent === false ? "未发送测试通知（权限未授予）" : "已发送一条测试通知，请查看通知栏");
-        resultEl.innerHTML = '<div class="card-hint" style="margin-top:8px;">' +
-          lines.map(escapeHtml).join("<br>") + '</div>';
+        /* 同步返回当前状态；权限为 default 时会异步请求，结果通过回调刷新 */
+        var st = MineKeepalive.testNotify(function (st2) {
+          renderTestResult(st2);
+        });
+        renderTestResult(st);
       });
+    }
+    function renderTestResult(st) {
+      if (!resultEl) return;
+      var lines = [];
+      lines.push("Service Worker 通道：" + (st.sw ? "可用" : "不可用"));
+      var permText = String(st.permission || "unknown");
+      if (permText === "granted") permText = "已授予";
+      else if (permText === "denied") permText = "已拒绝";
+      else if (permText === "default") permText = "未授予（默认）";
+      else if (permText === "unsupported") permText = "不支持";
+      lines.push("通知权限：" + permText);
+      if (st.secure !== undefined) {
+        lines.push("安全连接：" + (st.secure ? "是" : "否（通知需要 HTTPS）"));
+      }
+      if (st.ios !== undefined) {
+        lines.push("iOS 环境：" + (st.ios ? (st.standalone ? "PWA 模式" : "普通网页（通知需添加到主屏幕）") : "否"));
+      }
+      lines.push("保活通道：" + (st.audioMode === "wa" ? "WebAudio（不抢声音）" : "媒体元素"));
+      lines.push("保活播放中：" + (st.audioPlaying ? "是" : "否"));
+      lines.push("屏幕常亮：" + (st.wakeLock ? "是" : "否"));
+      if (st.requesting) lines.push("正在请求通知权限…请留意浏览器弹窗");
+      if (st.hint) lines.push(st.hint);
+      if (st.sent) lines.push("已发送一条测试通知，请查看通知栏");
+      resultEl.innerHTML = '<div class="card-hint" style="margin-top:8px;">' +
+        lines.map(escapeHtml).join("<br>") + '</div>';
     }
   }
   /* ---------------- 暴露接口 ---------------- */
