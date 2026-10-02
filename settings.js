@@ -129,7 +129,9 @@ window.MineSettings = (function () {
     html += '<div class="group-head">后台保活</div>';
     // 消息通知开关
     html += switchRow("set-notify", "chat", "消息通知",
-      "后台收到新消息 / 来电时弹出系统通知", prefs.notify);
+      "后台收到新消息 / 来电时弹出系统通知（打开开关即可请求授权）", prefs.notify);
+    // 通知权限状态行（实时提示权限状态与恢复指引）
+    html += '<div id="notify-perm-status" class="card-hint" style="margin:-6px 0 10px;"></div>';
     // 后台运行开关
     html += switchRow("set-background", "power", "后台运行",
       "后台保持活跃，回到页面不丢记录", prefs.background);
@@ -161,6 +163,7 @@ window.MineSettings = (function () {
     if (!detail) return;
     detail.innerHTML = navBar + html;
     bindEvents(detail);
+    syncNotifyStatus();
   }
   /* 开关行构建 */
   function switchRow(id, icon, title, sub, checked) {
@@ -207,6 +210,68 @@ window.MineSettings = (function () {
     return html;
   }
   /* ---------------- 事件绑定 ---------------- */
+  /* 轻提示（模块内实现：几秒后自动消失的底部浮层） */
+  var settingsToastTimer = null;
+  function toast(msg) {
+    try {
+      var old = document.querySelector(".settings-toast");
+      if (old) old.remove();
+      var d = document.createElement("div");
+      d.className = "settings-toast";
+      d.textContent = msg;
+      d.style.cssText = "position:fixed;left:50%;bottom:120px;transform:translateX(-50%);max-width:80%;padding:10px 14px;border-radius:12px;background:rgba(0,0,0,.78);color:#fff;font-size:13px;line-height:1.5;z-index:99999;pointer-events:none;";
+      document.body.appendChild(d);
+      if (settingsToastTimer) clearTimeout(settingsToastTimer);
+      settingsToastTimer = setTimeout(function () { try { d.remove(); } catch (e) {} }, 3200);
+    } catch (e) {}
+  }
+  /* —— 通知权限状态行 + 授权等待轮询（mochi 同款：开关保持开启、允许后自动生效） —— */
+  var notifyWatchTimer = null;
+  function notifyPermState() {
+    try { return ("Notification" in window) ? Notification.permission : "unsupported"; } catch (e) { return "unsupported"; }
+  }
+  function notifyStatusText() {
+    var p = notifyPermState();
+    if (p === "unsupported") {
+      return "⚠ 当前浏览器不支持系统通知（部分安卓自带浏览器 / 夸克等）：请用 Chrome 或 Edge 打开本站后再开此开关";
+    }
+    if (p === "granted") {
+      return "✓ 通知权限已授予：后台收到消息将直接弹系统通知";
+    }
+    if (p === "denied") {
+      return "⚠ 浏览器已把本站通知记为「阻止」（旧版反复请求导致自动禁止，多半不是你点的拒绝）。恢复：从桌面图标打开的应用 → 长按图标卸载后重新「添加到主屏幕」，安装时允许通知；浏览器标签打开 → 地址栏图标 → 网站设置 → 通知 → 允许（找不到入口就换 Chrome 打开本站重新授权）。允许后自动生效，无需再动此开关";
+    }
+    return "· 通知权限未授予：打开此开关即请求一次授权，浏览器弹窗选「允许」即可；若没弹窗（被浏览器自动阻止）→ 换 Chrome 打开本站或卸载重装应用，授权后自动生效";
+  }
+  function syncNotifyStatus() {
+    var el = document.getElementById("notify-perm-status");
+    if (!el) return;
+    el.textContent = notifyStatusText();
+  }
+  function notifyWatchStart() {
+    if (notifyWatchTimer) return;
+    var start = Date.now();
+    notifyWatchTimer = setInterval(function () {
+      var p = notifyPermState();
+      if (p === "granted" || p === "denied") {
+        clearInterval(notifyWatchTimer);
+        notifyWatchTimer = null;
+        syncNotifyStatus();
+        if (p === "granted") toast("通知权限已授予，消息通知已生效");
+      } else if (Date.now() - start > 12000) {
+        /* 授权框迟迟未决：保持开启，提示允许后自动生效 */
+        clearInterval(notifyWatchTimer);
+        notifyWatchTimer = null;
+        syncNotifyStatus();
+      }
+    }, 600);
+  }
+  function notifyWatchStop() {
+    if (notifyWatchTimer) {
+      clearInterval(notifyWatchTimer);
+      notifyWatchTimer = null;
+    }
+  }
   function bindEvents(pageEl) {
     var backBtn = pageEl.querySelector('[data-act="back"]');
     if (backBtn) backBtn.addEventListener("click", function () {
@@ -216,9 +281,37 @@ window.MineSettings = (function () {
     if (notifyEl) {
       notifyEl.addEventListener("change", function () {
         setPref("notify", notifyEl.checked);
-        // 重新开启通知时，顺手请求一次系统权限
-        if (notifyEl.checked && window.MineKeepalive) {
-          MineKeepalive.requestPermission();
+        if (notifyEl.checked) {
+          /* 打开开关 = 在用户手势内立即请求通知权限（mochi 同款） */
+          syncNotifyStatus();
+          if (window.MineKeepalive) {
+            MineKeepalive.requestPermission(function () {
+              /* granted：立即生效 */
+              notifyWatchStop();
+              syncNotifyStatus();
+              toast("消息通知已开启");
+            }, function (why) {
+              if (why === "unsupported") {
+                notifyEl.checked = false;
+                setPref("notify", false);
+                syncNotifyStatus();
+                toast("当前浏览器不支持系统通知，请用 Chrome 或 Edge");
+              } else if (why === "denied") {
+                /* 保持开启 + 等待用户恢复权限后自动生效（mochi 同款） */
+                notifyWatchStart();
+                syncNotifyStatus();
+                toast("通知权限被浏览器阻止：卸载重装应用时允许，或换 Chrome 重新授权；开关已保持开启，允许后自动生效");
+              } else {
+                /* pending / error：保持开启，等授权结果，允许后自动生效 */
+                notifyWatchStart();
+                syncNotifyStatus();
+                toast("请留意浏览器授权弹窗，选「允许」后自动生效");
+              }
+            });
+          }
+        } else {
+          notifyWatchStop();
+          syncNotifyStatus();
         }
       });
     }
