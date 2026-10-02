@@ -4,12 +4,15 @@
    目标（针对 vivo 浏览器 / Edge 安卓版）：
    · 网页进入后台后尽量保持活跃（双通道音频保活 + 退避补播 + 回前台补偿）
    · 后台收到消息 / 来电时弹出系统通知（SW 通道优先，页面通道兜底）
+   · 离线消息提醒（PSYNC，学习 mochi）：页面全关 / 被系统杀死后，
+     浏览器定期唤醒 SW 补发"你不在时 TA 说的话"系统通知
    · 通知去重闸：前台不弹 / 切后台 15 秒内不弹 / 内容指纹查重
    · 后台分类记账：回到前台汇总"你不在的时候收到 N 条新消息 · M 次来电"
    · 点击通知 → 跳转到对应会话
    · 聊天记录存于 localStorage，切后台 / 重进 / 刷新均不丢失
    说明：受手机系统省电机制限制，任何网页都无法 100% 保证后台永不休眠；
-         本模块用「音频保活 + 回前台补偿 + 系统通知」三层手段把体验做到最好。
+         本模块用「音频保活 + PSYNC 定期唤醒 + 回前台补偿 + 系统通知」
+         四层手段把体验做到最好。
    设置：状态存于 localStorage "mine.settings.v1"，由设置页写入；
          本模块通过 setPref / applyPrefs 立即生效。
    接入：index.html 引入（需在 settings.js 之前）；其他模块调用
@@ -269,6 +272,133 @@ window.MineKeepalive = (function () {
     audioStarted = false;
   }
 
+  /* ==================== PSYNC 离线消息提醒（零后端，学习 mochi） ====================
+     页面全关 / 被系统杀死后，由浏览器定期唤醒 SW 补发通知。
+     页面端职责：把后台期间用户未读的消息文案写入快照（IDB mine-psync），
+     并注册 periodicsync；SW 唤醒时读快照 → 弹通知。 */
+  var PSYNC_TAG = "mine-msg";
+  var PSYNC_SNAP_KEY = "mine.psync.snap.v1";
+  var PSYNC_SNAP_TTL = 7 * 24 * 60 * 60 * 1000;
+  var PSYNC_MAX = 30;
+  var psyncWriteChain = Promise.resolve(); // 串行化快照写入，防并发覆盖
+  function psyncSupported() {
+    try { return "serviceWorker" in navigator && "PeriodicSyncManager" in window; } catch (e) { return false; }
+  }
+  function psyncStandalone() {
+    try {
+      return !!(window.matchMedia && window.matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches);
+    } catch (e) { return false; }
+  }
+  function psyncOpenDb() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open("mine-psync", 1);
+      req.onupgradeneeded = function () {
+        try {
+          if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+        } catch (e) {}
+      };
+      req.onsuccess = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains("kv")) {
+          /* 异常残留（库存在但无 kv store）：删除重建 */
+          try { db.close(); } catch (e) {}
+          var del = indexedDB.deleteDatabase("mine-psync");
+          del.onsuccess = function () {
+            var req2 = indexedDB.open("mine-psync", 1);
+            req2.onupgradeneeded = function () {
+              try {
+                if (!req2.result.objectStoreNames.contains("kv")) req2.result.createObjectStore("kv");
+              } catch (e) {}
+            };
+            req2.onsuccess = function () { resolve(req2.result); };
+            req2.onerror = function () { reject(req2.error); };
+          };
+          del.onerror = function () { reject(del.error); };
+          return;
+        }
+        resolve(db);
+      };
+      req.onerror = function () { reject(req.error || new Error("psync idb open fail")); };
+    });
+  }
+  function psyncGet(key) {
+    return psyncOpenDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction("kv", "readonly");
+        var rq = tx.objectStore("kv").get(key);
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      });
+    });
+  }
+  function psyncSet(key, val) {
+    return psyncOpenDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(val, key);
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  /* 后台消息入快照（供 SW 页面全关后补发提醒；同文本 30 分钟内不重复）
+     快照写入不要求 standalone（标签页模式也记录，安装后即可补发）；
+     注册 periodicsync 才要求 standalone（浏览器策略）。 */
+  function pushPsyncSnapshot(title, body, convKey) {
+    if (!psyncSupported()) return;
+    var text = String(body || title || "")
+      .replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, "[图片]")
+      .trim().slice(0, 60);
+    if (!text) return;
+    psyncWriteChain = psyncWriteChain.then(function () {
+      return psyncGet(PSYNC_SNAP_KEY).then(function (snap) {
+        if (!snap || typeof snap !== "object") {
+          snap = { v: 1, ts: Date.now(), name: "Mine", convKey: convKey || null, texts: [] };
+        }
+        if (Date.now() - (snap.ts || 0) > PSYNC_SNAP_TTL) {
+          snap = { v: 1, ts: Date.now(), name: snap.name || "Mine", convKey: convKey || snap.convKey || null, texts: [] };
+        }
+        snap.ts = Date.now();
+        /* 全量查重：最近 30 分钟内的同文本不重复入 */
+        for (var i = snap.texts.length - 1; i >= 0; i--) {
+          var it2 = snap.texts[i];
+          if (!it2) continue;
+          if (Date.now() - (it2.ts || 0) > 30 * 60000) break;
+          if (it2.t === text) return;
+        }
+        snap.texts.push({ t: text, ts: Date.now() });
+        if (snap.texts.length > PSYNC_MAX) snap.texts = snap.texts.slice(-PSYNC_MAX);
+        return psyncSet(PSYNC_SNAP_KEY, snap);
+      }).catch(function () {});
+    });
+  }
+  /* 注册 periodicsync（Chromium + 已添加到主屏时调用；失败静默） */
+  function psyncApply() {
+    if (!psyncSupported()) return;
+    var registerIt = function () {
+      try {
+        navigator.serviceWorker.ready.then(function (reg) {
+          var pm = (reg && reg.periodicSync) || window.navigator.periodicSync;
+          if (pm && pm.register) {
+            pm.register(PSYNC_TAG, { minInterval: 6 * 60 * 60 * 1000 }).catch(function () {});
+          }
+        }).catch(function () {});
+      } catch (e) {}
+    };
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: "periodic-background-sync" }).then(function (st) {
+          if (st && st.state === "denied") return;
+          registerIt();
+        }).catch(registerIt);
+      } else {
+        registerIt();
+      }
+    } catch (e) {
+      registerIt();
+    }
+  }
+
   /* ==================== 系统通知 ==================== */
   function notificationsSupported() {
     return typeof window.Notification !== "undefined";
@@ -446,6 +576,8 @@ window.MineKeepalive = (function () {
       if (!hiddenByConv[opts.convKey]) hiddenByConv[opts.convKey] = 0;
       hiddenByConv[opts.convKey]++;
     }
+    // 入 PSYNC 快照：页面全关后 SW 也能补发提醒（学习 mochi 方案）
+    pushPsyncSnapshot(title, body, opts.convKey);
     // 通道：SW 优先，页面兜底
     var r = swNotify(title, body, opts);
     if (r === "no-sw" || r === "queued") {
@@ -618,6 +750,7 @@ window.MineKeepalive = (function () {
       wakeLock: !!wakeLock,
       stall: stallCount,
       queue: swQueue.length,
+      psync: { supported: psyncSupported(), standalone: psyncStandalone() },
       requesting: false,
       sent: false
     };
@@ -681,6 +814,8 @@ window.MineKeepalive = (function () {
       startKeepaliveAudio();
       requestWakeLock();
     }
+    /* PSYNC 离线提醒：延迟注册（等 SW ready + 权限就绪，失败静默） */
+    setTimeout(psyncApply, 5000);
   }
   init();
   return {
@@ -696,6 +831,8 @@ window.MineKeepalive = (function () {
     applyPrefs: applyPrefs,
     testNotify: testNotify,
     isBackground: function () { return document.visibilityState !== "visible"; },
-    notificationsSupported: notificationsSupported
+    notificationsSupported: notificationsSupported,
+    psyncSupported: psyncSupported,
+    psyncStandalone: psyncStandalone
   };
 })();
