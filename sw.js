@@ -58,7 +58,7 @@ var CORE_ASSETS = [
   "cards.js?v7",
   "chat.js?v52",
   "phone.js?v2",
-  "companion.js?v8",
+  "companion.js?v9",
   "profile.js?v14",
   "mail.js?v10",
   "treehole.js?v6",
