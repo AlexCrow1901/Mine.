@@ -1267,6 +1267,11 @@ window.MineChat = (function () {
       var files = Array.prototype.slice.call(input.files || []);
       document.body.removeChild(input);
       if (!files.length) return;
+      if (files.length > 9) {
+        files = files.slice(0, 9);
+        var fn = window.showToast || (window.MineUtils && MineUtils.showToast) || function () {};
+        fn("最多选择 9 张图片，已自动取前 9 张");
+      }
       closeWithMePanel();
       sendImages(files);
     });
@@ -1674,6 +1679,92 @@ window.MineChat = (function () {
   /* ========================================================================
      会话列表（聊天应用主页）
      ======================================================================== */
+  /* ========================================================================
+     会话列表 · 长按删除对话
+     长按会话栏（触摸 650ms / 鼠标按住 650ms）→ 底部弹出操作菜单
+     「删除聊天」→ 删除该会话全部消息 + 未读 + 自定义背景/字体色
+     ======================================================================== */
+  function bindConvLongPress(row) {
+    var timer = null;
+    var supportsTouch = ("ontouchstart" in window);
+    function cancel() { if (timer) { clearTimeout(timer); timer = null; } }
+    function start(e) {
+      if (e && e.button === 2) return;             /* 右键不触发 */
+      cancel();
+      timer = setTimeout(function () {
+        timer = null;
+        showConvActions(row);
+      }, 650);
+    }
+    if (supportsTouch) {
+      row.addEventListener("touchstart", start, { passive: true });
+      row.addEventListener("touchend", cancel);
+      row.addEventListener("touchmove", cancel, { passive: true });
+      row.addEventListener("touchcancel", cancel);
+    } else {
+      row.addEventListener("mousedown", start);
+      row.addEventListener("mouseup", cancel);
+      row.addEventListener("mousemove", cancel);
+      row.addEventListener("mouseleave", cancel);
+    }
+  }
+
+  /* 底部操作菜单：删除聊天 / 取消 */
+  function showConvActions(row) {
+    var key = row.getAttribute("data-conv-key");
+    if (!key) return;
+    var overlay = document.createElement("div");
+    overlay.className = "conv-actions-overlay";
+    var title = "";
+    var nameEl = row.querySelector(".conv-name");
+    if (nameEl) title = nameEl.textContent;
+    overlay.innerHTML =
+      '<div class="conv-actions-sheet">' +
+        '<div class="conv-actions-title">' + escapeHtml(title) + '</div>' +
+        '<button class="conv-action-btn is-danger" data-act="del">删除聊天</button>' +
+        '<button class="conv-action-btn" data-act="cancel">取消</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    function close() { overlay.remove(); }
+    overlay.querySelector('[data-act="del"]').addEventListener("click", function () {
+      close();
+      deleteConversation(key);
+    });
+    overlay.querySelector('[data-act="cancel"]').addEventListener("click", close);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+  }
+
+  /* 删除会话：消息 + 未读 + 会话自定义背景/字体色一并清除 */
+  function deleteConversation(convKey) {
+    delete conversations[convKey];
+    save();
+    /* 未读数清零 */
+    try {
+      var unread = JSON.parse(localStorage.getItem(UNREAD_KEY) || "{}");
+      if (unread[convKey]) { delete unread[convKey]; localStorage.setItem(UNREAD_KEY, JSON.stringify(unread)); }
+    } catch (e) {}
+    /* 会话自定义背景图（内存 + IndexedDB + 旧 localStorage 一并清除） */
+    try {
+      if (chatBg && chatBg[convKey]) {
+        delete chatBg[convKey];
+        chatBgDbDel(convKey).catch(function () {});
+      }
+    } catch (e) {}
+    try {
+      var bg = JSON.parse(localStorage.getItem(BG_KEY) || "{}");
+      if (bg[convKey]) { delete bg[convKey]; localStorage.setItem(BG_KEY, JSON.stringify(bg)); }
+    } catch (e) {}
+    /* 会话自定义字体颜色 */
+    try {
+      var fc = JSON.parse(localStorage.getItem(CHAT_FONTCOLOR_KEY) || "{}");
+      if (fc[convKey]) { delete fc[convKey]; localStorage.setItem(CHAT_FONTCOLOR_KEY, JSON.stringify(fc)); }
+    } catch (e) {}
+    if (window.MineNotify) MineNotify.refreshBadges();
+    if (typeof toast === "function") toast("已删除聊天记录");
+    /* 回到聊天列表（列表页重渲染 / 对话页切回列表） */
+    openConvList();
+  }
+
   function openConvList() {
     load();
     hideBackBottom();
@@ -1745,7 +1836,7 @@ window.MineChat = (function () {
           var badgeNum = conv.unread > 99 ? '99+' : String(conv.unread);
           badgeHTML = '<span class="conv-badge">' + escapeHtml(badgeNum) + '</span>';
         }
-        bodyHtml += '<div class="conv-row" data-conv-type="' + conv.type + '" data-conv-id="' + conv.id + '">' +
+        bodyHtml += '<div class="conv-row" data-conv-type="' + conv.type + '" data-conv-id="' + conv.id + '" data-conv-key="' + escapeHtml(conv.key) + '">' +
           '<div class="conv-avatar-wrap">' +
             conv.avatarHTML +
             badgeHTML +
@@ -1771,6 +1862,8 @@ window.MineChat = (function () {
         if (type === "contact") openContact(id);
         else openGroup(id);
       });
+      /* 长按联系人栏 → 删除该对话（微信式：弹出操作菜单） */
+      bindConvLongPress(row);
     });
     if (window.MineApp && MineApp.switchPage) MineApp.switchPage("chat");
   }

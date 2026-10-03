@@ -331,189 +331,6 @@ window.MineTheme = (function () {
     dom.switchBtn = btn;
   }
 
-  /* ====== 小组件弹窗 ====== */
-  var WIDGETS = [
-    { id: "moon-water", name: "月光水面", size: "4×1", icon: "moon" },
-    { id: "night-lamp", name: "晚安小灯", size: "2×2", icon: "lamp" },
-    { id: "date", name: "日期", size: "2×1", icon: "calendar" },
-    { id: "memory", name: "回忆", size: "4×1", icon: "memory" },
-    { id: "moon-phase", name: "月相", size: "4×2", icon: "moon" },
-    { id: "rose", name: "玫瑰", size: "2×1", icon: "rose" }
-  ];
-
-  function buildWidgetPanel() {
-    if (dom.widgetPanel) return;
-
-    var overlay = document.createElement("div");
-    overlay.className = "neu-overlay";
-
-    var panel = document.createElement("div");
-    panel.className = "neu-widget-panel";
-
-    var itemsHTML = WIDGETS.map(function (w) {
-      return '<div class="neu-widget-item">' +
-        '<div class="neu-widget-preview">' + widgetIconHTML(w.icon) + '</div>' +
-        '<div class="neu-widget-info">' +
-          '<div class="neu-widget-name">' + w.name + '</div>' +
-          '<div class="neu-widget-size">占' + w.size + '格</div>' +
-        '</div>' +
-        '<button class="neu-widget-add-btn" data-widget="' + w.id + '">添加</button>' +
-      '</div>';
-    }).join("");
-
-    panel.innerHTML =
-      '<div class="neu-panel-handle"></div>' +
-      '<div class="neu-panel-head">' +
-        '<span class="neu-panel-title">添加小组件</span>' +
-        '<button class="neu-panel-close">×</button>' +
-      '</div>' +
-      '<div class="neu-panel-body">' + itemsHTML + '</div>';
-
-    document.body.appendChild(overlay);
-    document.body.appendChild(panel);
-
-    dom.widgetOverlay = overlay;
-    dom.widgetPanel = panel;
-
-    /* 关闭 */
-    $(".neu-panel-close", panel).addEventListener("click", closeWidgetPanel);
-    overlay.addEventListener("click", closeWidgetPanel);
-
-    /* 添加按钮 */
-    $all(".neu-widget-add-btn", panel).forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var wid = btn.getAttribute("data-widget");
-        addWidget(wid);
-      });
-    });
-  }
-
-  function openWidgetPanel() {
-    buildWidgetPanel();
-    dom.widgetOverlay.classList.add("is-open");
-    dom.widgetPanel.classList.add("is-open");
-  }
-
-  function closeWidgetPanel() {
-    if (!dom.widgetPanel) return;
-    dom.widgetOverlay.classList.remove("is-open");
-    dom.widgetPanel.classList.remove("is-open");
-  }
-
-  function addWidget(widgetId) {
-    /* 简单反馈：关闭弹窗 */
-    closeWidgetPanel();
-    exitEditMode();
-  }
-
-  /* ====== 编辑模式 ====== */
-  function enterEditMode() {
-    document.body.classList.add("neu-edit-mode");
-  }
-
-  function exitEditMode() {
-    document.body.classList.remove("neu-edit-mode");
-  }
-
-  function toggleEditMode() {
-    document.body.classList.toggle("neu-edit-mode");
-  }
-
-  /* ====== 拖拽排序（触摸 + 鼠标） ====== */
-  function initDragSort() {
-    var containers = [".app-grid", ".neu-hero-row"];
-    containers.forEach(function (sel) {
-      var container = $(sel);
-      if (!container) return;
-      initContainerDrag(container);
-    });
-  }
-
-  function initContainerDrag(container) {
-    var dragEl = null;
-    var isDragging = false;
-    var startX = 0, startY = 0;
-
-    container.addEventListener("touchstart", handleStart, { passive: true });
-    container.addEventListener("touchmove", handleMove, { passive: false });
-    container.addEventListener("touchend", handleEnd);
-    container.addEventListener("mousedown", handleStart);
-    document.addEventListener("mousemove", handleMove);
-    document.addEventListener("mouseup", handleEnd);
-
-    function isEditMode() {
-      return document.body.classList.contains("neu-edit-mode");
-    }
-
-    function handleStart(e) {
-      if (!isEditMode()) return;
-      var touch = e.touches ? e.touches[0] : e;
-      var target = e.target;
-      /* 找到可拖拽的卡片元素 */
-      while (target && target !== container) {
-        if (target.classList.contains("app-cell") ||
-            target.classList.contains("neu-hero") ||
-            target.classList.contains("neu-clock") ||
-            target.classList.contains("neu-title-card")) {
-          dragEl = target;
-          break;
-        }
-        target = target.parentElement;
-      }
-      if (!dragEl) return;
-      startX = touch.clientX;
-      startY = touch.clientY;
-      isDragging = false;
-    }
-
-    function handleMove(e) {
-      if (!dragEl || !isEditMode()) return;
-      var touch = e.touches ? e.touches[0] : e;
-      var dx = touch.clientX - startX;
-      var dy = touch.clientY - startY;
-      if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-        isDragging = true;
-        dragEl.classList.add("neu-dragging");
-        if (e.preventDefault) e.preventDefault();
-      }
-      if (isDragging && e.preventDefault) e.preventDefault();
-
-      /* 检测拖拽目标位置 */
-      if (isDragging) {
-        var afterElement = getDragAfterElement(container, touch.clientY);
-        if (afterElement == null) {
-          container.appendChild(dragEl);
-        } else if (afterElement !== dragEl) {
-          container.insertBefore(dragEl, afterElement);
-        }
-      }
-    }
-
-    function handleEnd() {
-      if (dragEl) {
-        dragEl.classList.remove("neu-dragging");
-        dragEl = null;
-      }
-      isDragging = false;
-    }
-
-    function getDragAfterElement(container, y) {
-      var elements = $all(".app-cell, .neu-hero, .neu-clock, .neu-title-card", container);
-      var closest = null;
-      var closestOffset = -Infinity;
-      elements.forEach(function (child) {
-        if (child === dragEl) return;
-        var box = child.getBoundingClientRect();
-        var offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closestOffset) {
-          closestOffset = offset;
-          closest = child;
-        }
-      });
-      return closest;
-    }
-  }
-
   /* ====== 辅助函数 ====== */
   function escapeHtml(s) {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -525,103 +342,16 @@ window.MineTheme = (function () {
     return s.charAt(0) || "?";
   }
 
-  function widgetIconHTML(name) {
-    /* 简单的 SVG 占位图标 */
-    var icons = {
-      moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>',
-      lamp: '<svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5V15H8v-1.5A6 6 0 0 1 12 3z"/></svg>',
-      calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
-      memory: '<svg viewBox="0 0 24 24"><path d="M12 21c-5 0-9-4-9-9M21 12c0-5-4-9-9-9M12 3v9l6 3"/></svg>',
-      rose: '<svg viewBox="0 0 24 24"><path d="M12 5c-3 0-5 2-5 5s2 5 5 5 5-2 5-5-2-5-5-5zM12 15v6M9 21h6"/></svg>'
-    };
-    return icons[name] || icons.moon;
-  }
-
-  /* ====== 注入新拟态首页 HTML ====== */
+  /* ====== 注入新拟态首页 HTML ======
+     按用户要求删除主界面顶部卡片区（Hero / 时钟 / MEMOIRE 卡）与
+     长按后的小组件设置：不再注入任何卡片内容，主界面仅保留功能图标
+     宫格（app-grid）与底部导航。相关 DOM 引用置空后，renderNeuHome /
+     updateNeuClock 等渲染函数自动跳过（内部均有 null 判断），
+     主题切换与聊天气泡功能不受影响。 */
   function injectNeuHomeHTML() {
-    var homePage = $('[data-page="home"]');
-    if (!homePage || $("#neu-home-content")) return;
-
-    var gridWrap = $(".app-grid-wrap", homePage);
-    if (!gridWrap) return;
-
-    /* 在 app-grid 前面插入新拟态首页组件 */
-    var neuContent = document.createElement("div");
-    neuContent.id = "neu-home-content";
-    neuContent.style.cssText = "display:none;";
-    neuContent.innerHTML =
-      /* 编辑模式控制栏 */
-      '<div class="neu-edit-bar">' +
-        '<button class="neu-add-widget-btn">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;">' +
-          '<path d="M12 5v14M5 12h14"/></svg>' +
-          '添加小组件' +
-        '</button>' +
-        '<button class="neu-done-btn">完成</button>' +
-      '</div>' +
-      /* Hero 卡片 */
-      '<div class="neu-hero" data-widget="hero">' +
-        '<div class="neu-delete-badge">×</div>' +
-        '<div class="neu-hero-avatar"></div>' +
-        '<div class="neu-hero-info">' +
-          '<div class="neu-hero-name"></div>' +
-          '<div class="neu-hero-subtitle">Mine</div>' +
-          '<div class="neu-hero-quote">She walks with moonlight in her heart, and stars in her dreams.</div>' +
-        '</div>' +
-      '</div>' +
-      /* 时钟 + 标题行 */
-      '<div class="neu-row">' +
-        '<div class="neu-card neu-clock" data-widget="clock">' +
-          '<div class="neu-delete-badge">×</div>' +
-          '<div class="neu-clock-time">--:--</div>' +
-          '<div class="neu-clock-date">---</div>' +
-        '</div>' +
-        '<div class="neu-card neu-title-card" data-widget="title">' +
-          '<div class="neu-delete-badge">×</div>' +
-          '<div class="neu-brand">MEMOIRE</div>' +
-          '<div class="neu-title-main">A little moonlight</div>' +
-          '<div class="neu-title-sub">Keep the pages that quietly changed you</div>' +
-        '</div>' +
-      '</div>' +
-      /* 欢迎语 */
-      '<div class="neu-welcome">WELCOME HOME</div>';
-
-    gridWrap.insertBefore(neuContent, gridWrap.firstChild);
-
-    /* 缓存 DOM 引用 */
-    dom.heroContainer = $(".neu-hero", neuContent);
-    dom.clockTime = $(".neu-clock-time", neuContent);
-    dom.clockDate = $(".neu-clock-date", neuContent);
-
-    /* 编辑模式按钮 */
-    var addBtn = $(".neu-add-widget-btn", neuContent);
-    var doneBtn = $(".neu-done-btn", neuContent);
-    if (addBtn) addBtn.addEventListener("click", openWidgetPanel);
-    if (doneBtn) doneBtn.addEventListener("click", exitEditMode);
-
-    /* 删除按钮 */
-    $all(".neu-delete-badge", neuContent).forEach(function (badge) {
-      badge.addEventListener("click", function (e) {
-        e.stopPropagation();
-        var card = badge.parentElement;
-        if (card) card.style.display = "none";
-      });
-    });
-
-    /* 长按进入编辑模式 */
-    var longPressTimer = null;
-    neuContent.addEventListener("touchstart", function () {
-      longPressTimer = setTimeout(function () {
-        enterEditMode();
-        longPressTimer = null;
-      }, 650);
-    }, { passive: true });
-    neuContent.addEventListener("touchend", function () {
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    });
-    neuContent.addEventListener("touchmove", function () {
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    }, { passive: true });
+    dom.heroContainer = null;
+    dom.clockTime = null;
+    dom.clockDate = null;
   }
 
   /* ====== 显示/隐藏新拟态首页组件 ====== */
@@ -645,9 +375,6 @@ window.MineTheme = (function () {
     /* 加载保存的聊天气泡样式 */
     loadBubble();
 
-    /* 初始化拖拽排序 */
-    setTimeout(initDragSort, 500);
-
     /* 时钟定时更新 */
     updateNeuClock();
     setInterval(updateNeuClock, 10000);
@@ -655,9 +382,6 @@ window.MineTheme = (function () {
     /* 当主题切换时，控制新拟态首页显示 */
     onThemeChange = function (key) {
       showNeuHome(key === "neumorphism");
-      if (key === "neumorphism") {
-        setTimeout(initDragSort, 300);
-      }
     };
 
     /* 初始显示 */
@@ -673,9 +397,6 @@ window.MineTheme = (function () {
     applyBubble: applyBubble,
     getBubble: getBubble,
     registerBubble: registerBubble,
-    enterEditMode: enterEditMode,
-    exitEditMode: exitEditMode,
-    toggleEditMode: toggleEditMode,
     openThemePanel: openThemePanel,
     closeThemePanel: closeThemePanel
   };

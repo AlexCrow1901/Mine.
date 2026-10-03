@@ -1185,6 +1185,69 @@
 }
 
 /* ========================================================================
+   会话列表 · 长按删除对话（底部操作菜单）
+   ======================================================================== */
+.conv-actions-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  animation: conv-fade-in var(--dur-fast) var(--ease-soft);
+}
+.conv-actions-sheet {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--glass-2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+  box-shadow: var(--sh-diffuse);
+  animation: conv-sheet-up var(--dur-fast) var(--ease-soft);
+}
+.conv-actions-title {
+  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-primary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-action-btn {
+  display: block;
+  width: 100%;
+  height: 46px;
+  margin-top: var(--sp-2);
+  border: 1px solid var(--bd-medium);
+  border-radius: var(--r-md);
+  background: var(--glass-2);
+  color: var(--t-primary);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.conv-action-btn:active { background: var(--glass-press); }
+.conv-action-btn.is-danger {
+  color: #e5484d;
+  border-color: rgba(229, 72, 77, 0.35);
+}
+@keyframes conv-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes conv-sheet-up {
+  from { transform: translateY(40px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ========================================================================
    时间点击切换
    ======================================================================== */
 .time-text {
