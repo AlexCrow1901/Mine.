@@ -118,13 +118,12 @@ window.MineVoiceBar = (function () {
   var currentBar = null;
   var delegated = false;
 
-  /* 微信语音条时长格式：秒数 + 引号，如 3" / 1:05" */
+  /* 时长格式：纯秒数数字（3 / 1:05），不带引号 */
   function fmtDur(sec) {
     sec = Math.max(0, Math.floor(sec || 0));
     var s = sec % 60;
     var m = Math.floor(sec / 60);
-    var str = m > 0 ? m + ":" + (s < 10 ? "0" : "") + s : String(s);
-    return str + '"';
+    return m > 0 ? m + ":" + (s < 10 ? "0" : "") + s : String(s);
   }
 
   function setDur(bar, d) {
@@ -203,7 +202,7 @@ window.MineVoiceBar = (function () {
         '<i class="vb-pause">' + iconPause + '</i>' +
       '</span>' +
       '<span class="voice-bar-waves"><i></i><i></i><i></i><i></i></span>' +
-      '<span class="voice-bar-time">--"</span>' +
+      '<span class="voice-bar-time"></span>' +
     '</div>';
   }
 

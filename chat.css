@@ -1477,9 +1477,8 @@
 .msg-bubble.is-audio-msg {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 170px;
-  padding: 4px 6px;
+  min-width: 140px;
+  padding: 0;
   background: transparent;
   border: none;
   box-shadow: none;

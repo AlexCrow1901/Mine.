@@ -987,6 +987,14 @@ body.theme-neumorphism .msg-bubble.is-me {
   border-bottom-right-radius: var(--r-sm);
   box-shadow: var(--sh-neu-out);
 }
+/* 语音消息：语音条本身即气泡，去掉外层框（背景/边框/阴影/内边距/圆角全清） */
+body.theme-neumorphism .msg-bubble.is-audio-msg {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
 
 /* 消息时间 */
 body.theme-neumorphism .msg-time {
