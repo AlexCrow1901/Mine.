@@ -311,6 +311,17 @@ window.MineSettings = (function () {
       '</div>' +
       '<button class="chat-bg-btn icon-only" id="set-files" aria-label="打开文件">' + iconSvg("eye", 16) + '</button>' +
       '</div>';
+    // 版本与更新（PWA 安装后浏览器 SW 更新检测不及时，提供手动检测入口）
+    html += '<div class="group-head">版本与更新</div>';
+    html += '<div class="func-row">' +
+      '<div class="func-icon">' + iconSvg("refresh", 20) + '</div>' +
+      '<div class="func-text">' +
+        '<span class="func-title">版本更新</span>' +
+        '<span class="func-sub">当前版本 v' + appVersion() + ' · 点击检查最新版本</span>' +
+      '</div>' +
+      '<button class="chat-bg-btn icon-only" id="set-check-update" aria-label="检查更新">' + iconSvg("refresh", 16) + '</button>' +
+      '</div>';
+    html += '<div id="set-update-result"></div>';
     html += '<div class="card-hint">自定义桌面图标：上传图片即可，网站内即时生效，无需替换仓库文件、无需重新部署。桌面图标由浏览器自动同步（首次未自动更新时，重新"添加到主屏幕"一次即永久生效）。</div>';
     html += '<div class="card-hint">关闭"消息通知"后将不再弹出系统通知；关闭"后台运行"可节省电量，但后台活跃度会下降。受手机系统省电机制限制，网页后台保活尽力而为。</div>';
     html += '<div class="card-hint">聊天记录与朋友圈数据存储于本地，刷新、关闭、更新网站均不会丢失。</div>';
@@ -380,6 +391,149 @@ window.MineSettings = (function () {
       if (settingsToastTimer) clearTimeout(settingsToastTimer);
       settingsToastTimer = setTimeout(function () { try { d.remove(); } catch (e) {} }, 3200);
     } catch (e) {}
+  }
+  /* ---------------- 版本更新检测（设置页手动触发） ----------------
+     PWA 安装后浏览器对 SW 的更新检测不主动、不及时（通常 24h 才轮询一次），
+     这里提供手动入口：
+     · 点击「检查更新」→ 强制 reg.update() 检测 + 读取 version.json 对比版本号
+     · 发现新版本（SW 层面 waiting/installing，或版本号不一致）→ 行内展示
+       当前/最新版本 + [立即更新][稍后]
+     · 立即更新 → 发 SKIP_WAITING → 新 SW 接管（controllerchange）→ 刷新加载新版本
+     · 无新版本 → 提示「已是最新版本」；离线/不支持 → 明确提示
+     更新只替换缓存文件，聊天记录等本地数据（localStorage/IndexedDB）不受影响。
+     version.json 由 SW 放行不缓存（见 sw.js fetch），读取到的是服务器上的真实版本。 */
+  function appVersion() {
+    try {
+      var m = document.querySelector('meta[name="app-version"]');
+      if (m) return m.getAttribute("content") || "1.0.0";
+    } catch (e) {}
+    return "1.0.0";
+  }
+  var updateFoundWorker = null;   /* 本次检测出的 waiting SW（可能为 null，仅版本号不一致） */
+  var updateCheckTimer = null;
+  function setUpdateState(state, latest) {
+    var el = document.getElementById("set-update-result");
+    if (!el) return;
+    if (updateCheckTimer) { clearTimeout(updateCheckTimer); updateCheckTimer = null; }
+    var cur = appVersion();
+    var html = "";
+    if (state === "checking") {
+      html = '<div class="card-hint" style="margin-top:8px;">正在检查更新…</div>';
+    } else if (state === "latest") {
+      html = '<div class="card-hint" style="margin-top:8px;">✓ 已是最新版本 v' + cur + '</div>';
+    } else if (state === "nosw") {
+      html = '<div class="card-hint" style="margin-top:8px;">当前环境不支持自动更新，请手动刷新页面加载最新版本</div>';
+    } else if (state === "error") {
+      html = '<div class="card-hint" style="margin-top:8px;">✗ 检查失败：请确认网络连接后重试</div>';
+    } else if (state === "found") {
+      html = '<div class="card-hint" style="margin-top:8px;">发现新版本' +
+        (latest ? ' <b>v' + latest + '</b>（当前 v' + cur + '）' : '（当前 v' + cur + '）') +
+        '，更新后聊天记录等本地内容不受影响</div>' +
+        '<div class="update-banner-actions" style="margin-top:8px;">' +
+          '<button class="update-banner-btn is-primary" id="set-update-now">立即更新</button>' +
+          '<button class="update-banner-btn" id="set-update-later">稍后</button>' +
+        '</div>';
+      el.innerHTML = html;
+      var now = el.querySelector("#set-update-now");
+      var later = el.querySelector("#set-update-later");
+      if (now) now.addEventListener("click", applyUpdateNow);
+      if (later) later.addEventListener("click", function () { el.innerHTML = ""; });
+      return;
+    }
+    el.innerHTML = html;
+  }
+  function checkForUpdate() {
+    var checkBtn = document.getElementById("set-check-update");
+    if (checkBtn) checkBtn.disabled = true;
+    setUpdateState("checking");
+    var cur = appVersion();
+    var gotFound = false;
+    function found(latest, worker) {
+      if (gotFound) return;
+      gotFound = true;
+      updateFoundWorker = worker;
+      setUpdateState("found", latest);
+      if (checkBtn) checkBtn.disabled = false;
+    }
+    /* SW 层面强制检查：waiting / installing / updatefound */
+    function track(worker) {
+      if (!worker) return;
+      worker.addEventListener("statechange", function () {
+        if (worker.state === "installed" && !gotFound) found(null, worker);
+      });
+    }
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (!reg) { setUpdateState("nosw"); if (checkBtn) checkBtn.disabled = false; return; }
+        if (reg.waiting) { found(null, reg.waiting); return; }
+        if (reg.installing) track(reg.installing);
+        reg.addEventListener("updatefound", function h() {
+          reg.removeEventListener("updatefound", h);
+          track(reg.installing);
+        });
+        try { reg.update(); } catch (e) {}
+      }).catch(function () {});
+    }
+    /* version.json 版本对比（网络真实读取，不被 SW 缓存） */
+    fetch("version.json", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (d) {
+        var latest = d && d.version;
+        if (latest && cur && latest !== cur && !gotFound) found(latest, null);
+      })
+      .catch(function () {});
+    /* 兜底：6 秒无结果 → 判定为已是最新 */
+    updateCheckTimer = setTimeout(function () {
+      updateCheckTimer = null;
+      if (!gotFound) setUpdateState("latest");
+      if (checkBtn) checkBtn.disabled = false;
+    }, 6000);
+  }
+  /* 新 SW 接管后刷新页面（一次性监听，避免重复 reload） */
+  function onceControllerReload() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.addEventListener("controllerchange", function h() {
+      navigator.serviceWorker.removeEventListener("controllerchange", h);
+      location.reload();
+    });
+  }
+  /* 立即更新：SKIP_WAITING → controllerchange → 刷新 */
+  function applyUpdateNow() {
+    var worker = updateFoundWorker;
+    updateFoundWorker = null;
+    if (!("serviceWorker" in navigator)) { location.reload(); return; }
+    onceControllerReload();
+    if (worker && worker.postMessage) {
+      try { worker.postMessage({ type: "SKIP_WAITING" }); } catch (e) {}
+      return;
+    }
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (!reg) { location.reload(); return; }
+      if (reg.waiting) { try { reg.waiting.postMessage({ type: "SKIP_WAITING" }); } catch (e) {} return; }
+      if (reg.installing) {
+        reg.installing.addEventListener("statechange", function () {
+          if (reg.installing && reg.installing.state === "installed") {
+            try { reg.installing.postMessage({ type: "SKIP_WAITING" }); } catch (e) {}
+          }
+        });
+        return;
+      }
+      reg.update().then(function () {
+        reg.addEventListener("updatefound", function h() {
+          reg.removeEventListener("updatefound", h);
+          var ni = reg.installing;
+          if (!ni) { location.reload(); return; }
+          ni.addEventListener("statechange", function () {
+            if (ni.state === "installed") {
+              try { ni.postMessage({ type: "SKIP_WAITING" }); } catch (e) {}
+            }
+          });
+        });
+        setTimeout(function () {
+          if (!reg.waiting && !reg.installing) location.reload();
+        }, 5000);
+      }).catch(function () { location.reload(); });
+    }).catch(function () { location.reload(); });
   }
   /* —— 通知权限状态行 + 授权等待轮询（mochi 同款：开关保持开启、允许后自动生效） —— */
   var notifyWatchTimer = null;
@@ -534,6 +688,11 @@ window.MineSettings = (function () {
           if (window.MineApp) MineApp.switchPage("detail", "files");
         }
       });
+    }
+    /* 版本更新：手动检查更新 */
+    var checkUpdateBtn = pageEl.querySelector("#set-check-update");
+    if (checkUpdateBtn) {
+      checkUpdateBtn.addEventListener("click", checkForUpdate);
     }
     function renderTestResult(st) {
       if (!resultEl) return;
