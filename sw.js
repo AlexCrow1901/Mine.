@@ -56,7 +56,7 @@ var CORE_ASSETS = [
   "probabilities.js?v7",
   "contacts.js?v22",
   "cards.js?v8",
-  "chat.js?v54",
+  "chat.js?v55",
   "phone.js?v5",
   "companion.js?v9",
   "profile.js?v14",

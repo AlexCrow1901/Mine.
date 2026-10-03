@@ -836,6 +836,10 @@ window.MineChat = (function () {
                 '<span class="wm-action-icon">' + I.svg("feather", 18) + '</span>' +
                 '<span class="wm-action-name">抉择</span>' +
               '</div>' +
+              '<div class="wm-action" role="button" tabindex="0" data-wm="image">' +
+                '<span class="wm-action-icon">' + I.svg("image", 18) + '</span>' +
+                '<span class="wm-action-name">图片</span>' +
+              '</div>' +
               (ctx.type === "contact"
                 ? '<div class="wm-action" role="button" tabindex="0" data-wm="call">' +
                   '<span class="wm-action-icon">' + I.svg("phone", 18) + '</span>' +
@@ -1089,6 +1093,17 @@ window.MineChat = (function () {
         }
       });
     }
+    // 图片：with me 栏目（多选图片发送）
+    var wmImage = pageEl.querySelector('[data-wm="image"]');
+    if (wmImage) {
+      wmImage.addEventListener("click", function () { openImagePicker(); });
+      wmImage.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openImagePicker();
+        }
+      });
+    }
     // 用户滚动消息区：离开底部时显示"回到底部"，回到底部时隐藏
     msgContainer.addEventListener("scroll", function () {
       if (isNearBottom()) hideBackBottom();
@@ -1240,6 +1255,63 @@ window.MineChat = (function () {
     sendBtn.addEventListener("click", doSend);
   }
   /* ---------------- 发送锁：移除（用输入框清空防重复即可） ---------------- */
+  /* ---------------- 图片发送（with me 栏目 · 多选） ---------------- */
+  function openImagePicker() {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", function () {
+      var files = Array.prototype.slice.call(input.files || []);
+      document.body.removeChild(input);
+      if (!files.length) return;
+      closeWithMePanel();
+      sendImages(files);
+    });
+    input.click();
+  }
+
+  function closeWithMePanel() {
+    var panel = document.getElementById("with-me-panel");
+    var chevron = document.getElementById("with-me-chevron");
+    if (panel) panel.classList.remove("is-open");
+    if (chevron) chevron.classList.remove("is-down");
+  }
+
+  /* 多张图片：逐张压缩后按选中顺序发送为独立图片消息 */
+  function sendImages(files) {
+    var queue = files.filter(function (f) { return /^image\//.test(f.type); });
+    if (!queue.length) return;
+    function next() {
+      if (!queue.length) return;
+      var file = queue.shift();
+      if (window.MineUtils && MineUtils.compressImage) {
+        MineUtils.compressImage(file, 1080, 0.82, function (dataURL) {
+          if (dataURL) pushImageMsg(dataURL);
+          next();
+        });
+      } else {
+        var reader = new FileReader();
+        reader.onload = function () {
+          pushImageMsg(reader.result);
+          next();
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+    next();
+  }
+
+  function pushImageMsg(dataURL) {
+    var msgs = conversations[ctx.convKey] || [];
+    msgs.push({ id: uid(), from: "me", text: dataURL, time: Date.now(), read: false });
+    conversations[ctx.convKey] = msgs;
+    save();
+    appendMessage(msgs[msgs.length - 1]);
+    if (window.MineNotify) MineNotify.refreshBadges();
+  }
   /* ---------------- 发送消息 ---------------- */
   function doSend() {
     var text = (inputEl.value || "").trim();
