@@ -80,7 +80,7 @@ window.MineProbs = (function () {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
-  /** 读取某个概率（0~100 的整数），供 chat.js 使用 */
+  /** 读取某个概率（0~100，允许一位小数），供 chat.js 使用 */
   function get(key) {
     load();
     if (state[key] === undefined) return DEFAULTS[key] !== undefined ? DEFAULTS[key] : 0;
@@ -89,7 +89,8 @@ window.MineProbs = (function () {
   function set(key, value) {
     load();
     if (DEFAULTS[key] === undefined) return false;
-    state[key] = clamp(value);
+    /* 统一保留一位小数（0~100%） */
+    state[key] = Math.round(clamp(value) * 10) / 10;
     save();
     return true;
   }
@@ -100,12 +101,16 @@ window.MineProbs = (function () {
     return true;
   }
 
-  /* ==================== 管理面板 ==================== */
-  var sheetEl = null;
-  var overlayEl = null;
+  /* ==================== 页内分栏（个人中心「概率」下直接展开，不再弹窗） ==================== */
   var currentTab = "cards";   // "cards"（字卡概率）| "phone"（电话概率）
 
-  /* 分组：字卡 / 电话（面板通过 tab 切换显示） */
+  /** 数值展示：去除多余小数位，如 0.5 / 5 */
+  function fmt(v) {
+    var n = Math.round((parseFloat(v) || 0) * 10) / 10;
+    return String(n);
+  }
+
+  /* 分组：字卡 / 电话（分栏通过 tab 切换显示） */
   var GROUPS = [
     {
       key: "cards",
@@ -147,40 +152,20 @@ window.MineProbs = (function () {
     }
   ];
 
-  function buildSheet() {
-    if (sheetEl) return;
-    overlayEl = document.createElement("div");
-    overlayEl.className = "sheet-overlay";
-    overlayEl.addEventListener("click", closeManager);
-
-    sheetEl = document.createElement("div");
-    sheetEl.className = "sheet";
-    sheetEl.innerHTML =
-      '<div class="sheet-handle"></div>' +
-      '<div class="sheet-head"><h2>概率修改</h2>' +
-      '<button class="nav-btn" data-act="close">' + I.svg("close", 20) + '</button></div>' +
-      '<div class="sheet-body" id="probs-sheet-body"></div>';
-
-    document.body.appendChild(overlayEl);
-    document.body.appendChild(sheetEl);
-    sheetEl.querySelector('[data-act="close"]').addEventListener("click", closeManager);
-    render();
-  }
-
-  function render() {
-    var body = document.getElementById("probs-sheet-body");
-    if (!body) return;
+  /** 渲染页内分栏（挂在个人中心「概率修改」行下方） */
+  function renderInline(container) {
+    if (!container) return;
     load();
 
-    /* tab：修改字卡 / 修改电话 */
+    /* 分栏 tab：字卡概率 / 电话概率 */
     var tabs =
-      '<div class="card-tabs">' +
+      '<div class="prob-tabs">' +
         '<button class="card-tab' + (currentTab === "cards" ? " is-active" : "") + '" data-tab="cards">字卡概率</button>' +
         '<button class="card-tab' + (currentTab === "phone" ? " is-active" : "") + '" data-tab="phone">电话概率</button>' +
       '</div>';
 
     var html = tabs +
-      '<div class="card-hint">修改范围为 0~100%，点击加减号或直接输入数字，立即生效</div>';
+      '<div class="card-hint">修改范围为 0~100%，支持一位小数（如 0.5%），点击加减号或直接输入数字，立即生效</div>';
     GROUPS.forEach(function (g) {
       if (g.key !== currentTab) return;
       html += '<div class="prob-group-title">' + g.title + '</div>';
@@ -189,12 +174,12 @@ window.MineProbs = (function () {
         return '<div class="prob-item">' +
           '<div class="prob-head">' +
             '<span class="prob-name">' + it.name + '</span>' +
-            '<span class="prob-value">' + val + '%</span>' +
+            '<span class="prob-value">' + fmt(val) + '%</span>' +
           '</div>' +
           '<div class="prob-desc">' + it.desc + '</div>' +
           '<div class="prob-ctl">' +
             '<button class="prob-step" data-step="' + it.key + '" data-delta="-1" aria-label="减">' + I.svg("minus", 18) + '</button>' +
-            '<input type="number" class="prob-input" data-key="' + it.key + '" min="0" max="100" step="any" value="' + val + '">' +
+            '<input type="number" class="prob-input" data-key="' + it.key + '" min="0" max="100" step="0.1" value="' + fmt(val) + '">' +
             '<span class="prob-unit">%</span>' +
             '<button class="prob-step" data-step="' + it.key + '" data-delta="1" aria-label="加">' + I.svg("plus", 18) + '</button>' +
             '<button class="prob-step" data-step="' + it.key + '" data-delta="-5" aria-label="减5">' + I.svg("minus", 18) + '5</button>' +
@@ -204,48 +189,46 @@ window.MineProbs = (function () {
       }).join("") + '</div>';
     });
 
-    html += '<div style="padding:var(--sp-4) var(--sp-5);">' +
+    html += '<div class="prob-reset-wrap">' +
       '<button class="btn btn-block" data-act="reset-probs">' + I.svg("refresh", 16) + ' 恢复默认</button>' +
       '</div>';
 
-    body.innerHTML = html;
-    bindEvents(body);
+    container.innerHTML = html;
+    bindInline(container);
   }
 
-  function bindEvents(body) {
-    /* tab：字卡概率 / 电话概率 */
-    body.querySelectorAll("[data-tab]").forEach(function (btn) {
+  function bindInline(container) {
+    /* 分栏 tab：字卡概率 / 电话概率 */
+    container.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         currentTab = btn.getAttribute("data-tab");
-        render();
+        renderInline(container);
       });
     });
 
     /* 加减号（±1 / ±5） */
-    body.querySelectorAll("[data-step]").forEach(function (btn) {
+    container.querySelectorAll("[data-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var key = btn.getAttribute("data-step");
         var delta = parseFloat(btn.getAttribute("data-delta"));
         set(key, get(key) + delta);
-        var input = body.querySelector('[data-key="' + key + '"]');
-        if (input) input.value = get(key);
-        var val = body.querySelector('.prob-item [data-key="' + key + '"]');
-        /* 同步该行百分比显示 */
+        var input = container.querySelector('[data-key="' + key + '"]');
+        if (input) input.value = fmt(get(key));
         var row = input ? input.closest(".prob-item") : null;
-        if (row) row.querySelector(".prob-value").textContent = get(key) + "%";
+        if (row) row.querySelector(".prob-value").textContent = fmt(get(key)) + "%";
       });
     });
 
-    /* 打字输入 */
-    body.querySelectorAll(".prob-input").forEach(function (input) {
+    /* 打字输入（支持一位小数） */
+    container.querySelectorAll(".prob-input").forEach(function (input) {
       var commit = function () {
         var key = input.getAttribute("data-key");
         var v = parseFloat(input.value);
-        if (isNaN(v)) { input.value = get(key); return; }
+        if (isNaN(v)) { input.value = fmt(get(key)); return; }
         set(key, v);
-        input.value = get(key);
+        input.value = fmt(get(key));
         var row = input.closest(".prob-item");
-        if (row) row.querySelector(".prob-value").textContent = get(key) + "%";
+        if (row) row.querySelector(".prob-value").textContent = fmt(get(key)) + "%";
       };
       input.addEventListener("change", commit);
       input.addEventListener("blur", commit);
@@ -255,11 +238,11 @@ window.MineProbs = (function () {
     });
 
     /* 恢复默认 */
-    var resetBtn = body.querySelector('[data-act="reset-probs"]');
+    var resetBtn = container.querySelector('[data-act="reset-probs"]');
     if (resetBtn) {
       resetBtn.addEventListener("click", function () {
         resetAll();
-        render();
+        renderInline(container);
         showToast("已恢复默认概率");
       });
     }
@@ -278,20 +261,6 @@ window.MineProbs = (function () {
     } catch (e) {}
   }
 
-  function openManager() {
-    load();
-    buildSheet();
-    requestAnimationFrame(function () {
-      overlayEl.classList.add("is-open");
-      sheetEl.classList.add("is-open");
-    });
-  }
-  function closeManager() {
-    if (!sheetEl) return;
-    overlayEl.classList.remove("is-open");
-    sheetEl.classList.remove("is-open");
-  }
-
   /* ==================== 初始化 ==================== */
   function init() {
     load();
@@ -299,8 +268,7 @@ window.MineProbs = (function () {
 
   return {
     init: init,
-    openManager: openManager,
-    closeManager: closeManager,
+    renderInline: renderInline,
     get: get,
     set: set,
     resetAll: resetAll,

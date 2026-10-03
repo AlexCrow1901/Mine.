@@ -291,10 +291,44 @@ window.MineCompanion = (function () {
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  /* ========================================================================
+     今日寄语 · 自定义文案（可添加 / 删除 / 导入 / 导出）
+     ------------------------------------------------------------------------
+     自定义寄语存于 localStorage "mine.companion.quotes.v1"：
+        [{ text: 文案, author: 作者 }, ...]
+     与内置经典诗句共同参与每 12 小时的随机抽取。
+     ======================================================================== */
+  var USER_QUOTES_KEY = "mine.companion.quotes.v1";
+  var userQuotes = [];
+  function loadUserQuotes() {
+    userQuotes = [];
+    try {
+      var raw = localStorage.getItem(USER_QUOTES_KEY);
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (Array.isArray(d)) {
+          d.forEach(function (q) {
+            if (!q) return;
+            if (typeof q === "string" && q.trim()) {
+              userQuotes.push({ text: q.trim(), author: "" });
+            } else if (q && typeof q === "object" && typeof q.text === "string" && q.text.trim()) {
+              userQuotes.push({ text: q.text.trim(), author: String(q.author || "").trim() });
+            }
+          });
+        }
+      }
+    } catch (e) {}
+  }
+  function saveUserQuotes() {
+    try { localStorage.setItem(USER_QUOTES_KEY, JSON.stringify(userQuotes)); } catch (e) {}
+  }
+
   function getDailyQuote() {
     /* 每隔 12 小时随机抽取一句，同一 12 小时窗口内结果一致 */
     var now = new Date();
     var halfDayIndex = Math.floor(now.getTime() / 43200000); // 43200000ms = 12小时
+    var pool = QUOTES.concat(userQuotes);
+    if (pool.length === 0) return { text: "静候灵感降临。", author: "Mine" };
     // 用时间窗口作为种子做伪随机，确保同一窗口内结果一致
     var seed = halfDayIndex;
     var rand = function () {
@@ -303,8 +337,8 @@ window.MineCompanion = (function () {
     };
     // 多次迭代使种子更分散
     for (var i = 0; i < 10; i++) { rand(); }
-    var idx = Math.floor(rand() * QUOTES.length);
-    return QUOTES[idx];
+    var idx = Math.floor(rand() * pool.length);
+    return pool[idx];
   }
 
   /** 每隔 12 小时从联系人列表中随机抽取一位，返回其昵称 */
@@ -386,6 +420,7 @@ window.MineCompanion = (function () {
     html += '<div class="comp-quote-label">' + escapeHtml(label) + '</div>';
     html += '<div class="comp-quote-text">' + escapeHtml(quote.text) + '</div>';
     html += '<div class="comp-quote-author">—— ' + escapeHtml(quote.author) + '</div>';
+    html += '<button class="comp-quote-manage" data-act="quote-manage">' + I.svg("pencil", 14) + '管理今日寄语</button>';
     html += '</div>';
 
     // 内容应用网格
@@ -427,6 +462,12 @@ window.MineCompanion = (function () {
       backBtn.addEventListener("click", function () {
         if (window.MineApp && MineApp.goHome) MineApp.goHome();
       });
+    }
+
+    // 今日寄语管理
+    var quoteManageBtn = pageEl.querySelector('[data-act="quote-manage"]');
+    if (quoteManageBtn) {
+      quoteManageBtn.addEventListener("click", openQuoteManager);
     }
 
     // 内容卡片点击
@@ -497,6 +538,182 @@ window.MineCompanion = (function () {
   }
 
   /* ========================================================================
+     今日寄语管理面板（添加 / 删除 / 导入 / 导出）
+     ======================================================================== */
+  var quoteSheetEl = null;
+  var quoteOverlayEl = null;
+
+  function quoteStamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+  }
+  function quoteDownload(arr) {
+    var blob = new Blob([JSON.stringify(arr, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "mine-quotes-" + quoteStamp() + ".json";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+  }
+  function quoteToast(msg) {
+    var el = document.querySelector(".phone-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "phone-toast";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add("is-show");
+    setTimeout(function () { el.classList.remove("is-show"); }, 2200);
+  }
+  function openQuoteManager() {
+    if (!quoteSheetEl) {
+      quoteOverlayEl = document.createElement("div");
+      quoteOverlayEl.className = "sheet-overlay";
+      quoteOverlayEl.addEventListener("click", closeQuoteManager);
+
+      quoteSheetEl = document.createElement("div");
+      quoteSheetEl.className = "sheet";
+      quoteSheetEl.innerHTML =
+        '<div class="sheet-handle"></div>' +
+        '<div class="sheet-head"><h2>今日寄语管理</h2>' +
+        '<button class="nav-btn" data-act="close">' + I.svg("close", 20) + '</button></div>' +
+        '<div class="sheet-body" id="quote-sheet-body"></div>';
+      document.body.appendChild(quoteOverlayEl);
+      document.body.appendChild(quoteSheetEl);
+      quoteSheetEl.querySelector('[data-act="close"]').addEventListener("click", closeQuoteManager);
+    }
+    renderQuoteManager();
+    requestAnimationFrame(function () {
+      quoteOverlayEl.classList.add("is-open");
+      quoteSheetEl.classList.add("is-open");
+    });
+  }
+  function closeQuoteManager() {
+    if (!quoteSheetEl) return;
+    quoteOverlayEl.classList.remove("is-open");
+    quoteSheetEl.classList.remove("is-open");
+  }
+  function renderQuoteManager() {
+    loadUserQuotes();
+    var body = document.getElementById("quote-sheet-body");
+    if (!body) return;
+    var listHtml = userQuotes.length
+      ? userQuotes.map(function (q, i) {
+          return '<div class="quote-item">' +
+            '<div class="quote-item-main">' +
+              '<div class="quote-item-text">' + escapeHtml(q.text) + '</div>' +
+              (q.author ? '<div class="quote-item-author">—— ' + escapeHtml(q.author) + '</div>' : '') +
+            '</div>' +
+            '<button class="quote-del" data-quote-del="' + i + '" aria-label="删除">' + I.svg("trash", 16) + '</button>' +
+          '</div>';
+        }).join("")
+      : '<div class="quote-empty">还没有自定义寄语，添加一句吧</div>';
+    body.innerHTML =
+      '<div class="card-hint">自定义寄语会与内置经典诗句一起随机展示 · 格式：文案 或 文案|作者</div>' +
+      '<div class="quote-add-row">' +
+        '<input type="text" class="card-input" id="quote-input" placeholder="输入寄语文案（可选 | 作者），回车添加" maxlength="200">' +
+        '<button class="card-add-btn" data-act="quote-add" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
+      '</div>' +
+      '<div class="quote-tools">' +
+        '<button class="card-type-tool" data-act="quote-export">' + I.svg("download", 13) + '导出</button>' +
+        '<button class="card-type-tool" data-act="quote-import">' + I.svg("upload", 13) + '导入</button>' +
+      '</div>' +
+      '<div class="quote-list">' + listHtml + '</div>';
+    bindQuoteEvents(body);
+  }
+  function bindQuoteEvents(body) {
+    /* 添加（回车 / + 按钮） */
+    var input = body.querySelector("#quote-input");
+    function doAdd() {
+      var v = input ? input.value.trim() : "";
+      if (!v) { quoteToast("请输入寄语文案"); return; }
+      var text = v, author = "";
+      var pipe = v.indexOf("|");
+      if (pipe >= 0) {
+        text = v.slice(0, pipe).trim();
+        author = v.slice(pipe + 1).trim();
+      }
+      if (!text) { quoteToast("文案不能为空"); return; }
+      userQuotes.push({ text: text, author: author });
+      saveUserQuotes();
+      if (input) input.value = "";
+      quoteToast("已添加今日寄语");
+      renderQuoteManager();
+    }
+    if (input) {
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); doAdd(); }
+      });
+    }
+    var addBtn = body.querySelector('[data-act="quote-add"]');
+    if (addBtn) addBtn.addEventListener("click", doAdd);
+
+    /* 删除 */
+    body.querySelectorAll("[data-quote-del]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var i = parseInt(btn.getAttribute("data-quote-del"), 10);
+        if (i >= 0 && i < userQuotes.length) {
+          userQuotes.splice(i, 1);
+          saveUserQuotes();
+          renderQuoteManager();
+        }
+      });
+    });
+
+    /* 导出 */
+    var expBtn = body.querySelector('[data-act="quote-export"]');
+    if (expBtn) {
+      expBtn.addEventListener("click", function () {
+        if (!userQuotes.length) { quoteToast("暂无自定义寄语可导出"); return; }
+        quoteDownload(userQuotes);
+        quoteToast("已导出 " + userQuotes.length + " 条寄语");
+      });
+    }
+
+    /* 导入 */
+    var impBtn = body.querySelector('[data-act="quote-import"]');
+    if (impBtn) {
+      impBtn.addEventListener("click", function () {
+        var fi = document.createElement("input");
+        fi.type = "file";
+        fi.accept = ".json,application/json";
+        fi.style.display = "none";
+        document.body.appendChild(fi);
+        fi.addEventListener("change", function () {
+          var f = fi.files && fi.files[0];
+          document.body.removeChild(fi);
+          if (!f) return;
+          var reader = new FileReader();
+          reader.onload = function () {
+            var data;
+            try { data = JSON.parse(String(reader.result)); } catch (e) { quoteToast("文件不是有效的 JSON"); return; }
+            if (!Array.isArray(data)) { quoteToast("格式不符：应为寄语数组"); return; }
+            var added = 0;
+            data.forEach(function (q) {
+              if (typeof q === "string" && q.trim()) {
+                userQuotes.push({ text: q.trim(), author: "" }); added++;
+              } else if (q && typeof q === "object" && typeof q.text === "string" && q.text.trim()) {
+                userQuotes.push({ text: q.text.trim(), author: String(q.author || "").trim() }); added++;
+              }
+            });
+            if (!added) { quoteToast("文件中没有可导入的寄语"); return; }
+            saveUserQuotes();
+            quoteToast("已导入 " + added + " 条寄语");
+            renderQuoteManager();
+          };
+          reader.onerror = function () { quoteToast("读取文件失败"); };
+          reader.readAsText(f);
+        });
+        fi.click();
+      });
+    }
+  }
+
+  /* ========================================================================
      对外接口
      ======================================================================== */
   function open() {
@@ -521,6 +738,7 @@ window.MineCompanion = (function () {
 
   /* ---------------- 初始化 ---------------- */
   function init() {
+    loadUserQuotes();
     pageEl = document.getElementById("page-companion");
     // 注册次元信箱
     register("time-mailbox", function () {

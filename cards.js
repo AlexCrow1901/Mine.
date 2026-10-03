@@ -22,7 +22,7 @@ window.MineCards = (function () {
   var C = window.MineContacts;
   var STORE_KEY = "mine.cards.v1";
 
-  var state = { public: [], per: {}, autoPer: {}, sys: [] };
+  var state = { public: [], per: {}, autoPer: {}, sys: [], sysAllOn: true, sysOff: {} };
   var expandedTypes = { text: true, emoji: true, image: true, audio: false, auto: false };  // 类型栏折叠状态
 
   /* ==================== 字卡类型判断（与 chat.js 保持同一套规则） ==================== */
@@ -60,12 +60,16 @@ window.MineCards = (function () {
         state.per = (d.per && typeof d.per === "object") ? d.per : {};
         state.sys = Array.isArray(d.sys) ? d.sys : [];
         state.autoPer = (d.autoPer && typeof d.autoPer === "object") ? d.autoPer : {};
+        state.sysAllOn = d.sysAllOn === false ? false : true;
+        state.sysOff = (d.sysOff && typeof d.sysOff === "object") ? d.sysOff : {};
       }
     } catch (e) {}
     if (!Array.isArray(state.public)) state.public = [];
     if (!state.per || typeof state.per !== "object") state.per = {};
     if (!Array.isArray(state.sys)) state.sys = [];
     if (!state.autoPer || typeof state.autoPer !== "object") state.autoPer = {};
+    if (state.sysAllOn !== false) state.sysAllOn = true;
+    if (!state.sysOff || typeof state.sysOff !== "object") state.sysOff = {};
   }
 
   /* ==================== 数据读写 ==================== */
@@ -73,8 +77,24 @@ window.MineCards = (function () {
   function getPerCards(cid) {
     return (cid && state.per[cid]) ? state.per[cid].slice() : [];
   }
-  /* 系统字卡（所有联系人可用，独立发送概率） */
-  function getSysCards() { return state.sys.slice(); }
+  /* 系统字卡（所有联系人可用，独立发送概率）——按开关过滤：总开关关闭返回空，单张关闭的不参与 */
+  function getSysCards() {
+    if (state.sysAllOn === false) return [];
+    return state.sys.filter(function (c) { return !state.sysOff[c]; });
+  }
+  /* 系统字卡总开关 */
+  function getSysAllOn() { return state.sysAllOn !== false; }
+  function setSysAllOn(on) { state.sysAllOn = !!on; save(); }
+  /* 单张系统字卡开关 */
+  function isSysCardOn(card) { return getSysAllOn() && !state.sysOff[card]; }
+  function setSysCardOn(card, on) {
+    if (card === undefined || card === null) return;
+    if (on) {
+      if (state.sysOff[card]) { delete state.sysOff[card]; save(); }
+    } else {
+      if (!state.sysOff[card]) { state.sysOff[card] = true; save(); }
+    }
+  }
   /* 聊天回复使用的字卡池：单独字卡(该联系人) + 公用字卡（系统字卡由 chat.js 单独读取） */
   function getReplyPool(cid) {
     var pool = [];
@@ -85,7 +105,7 @@ window.MineCards = (function () {
     return pool;
   }
   function hasAnyCards() {
-    return state.public.length > 0 || state.sys.length > 0 || Object.keys(state.per).some(function (k) {
+    return state.public.length > 0 || getSysCards().length > 0 || Object.keys(state.per).some(function (k) {
       return state.per[k] && state.per[k].length > 0;
     });
   }
@@ -379,21 +399,29 @@ window.MineCards = (function () {
 
   /* ---- 公用字卡 tab ---- */
   function renderPublicTab() {
-    var html = '<div class="card-hint">公用字卡：所有联系人自动回复时均可使用</div>';
+    var html = '<div class="card-hint">公用字卡：所有联系人普通回复时均可使用（不用于自动回复）</div>';
     html += renderCardEditor(state.public, "public", null);
     return html;
   }
 
-  /* ---- 系统字卡 tab：所有联系人均可使用，独立发送概率 ---- */
+  /* ---- 系统字卡 tab：系统预设字卡，可整体 / 单张开关，可自行添加 ---- */
   function renderSysTab() {
-    var html = '<div class="card-hint">系统字卡：所有联系人均可使用，发送概率可在「概率修改 - 字卡概率」中调整</div>';
+    var on = getSysAllOn();
+    var html =
+      '<div class="card-hint">系统字卡：系统预设字卡，所有联系人回复时均可使用 · 可整体开关 / 单张开关 / 自行添加 · 发送概率可在「概率修改」中调整</div>' +
+      '<div class="sys-master-row">' +
+        '<span class="sys-master-label">' + (on ? "系统字卡已开启" : "系统字卡已关闭") + '</span>' +
+        '<button class="sys-master-toggle' + (on ? " is-on" : "") + '" data-sys-all-toggle aria-pressed="' + (on ? "true" : "false") + '">' +
+          (on ? I.svg("close", 14) + '关闭全部' : I.svg("check", 14) + '开启全部') +
+        '</button>' +
+      '</div>';
     html += renderCardEditor(state.sys, "sys", null, true);
     return html;
   }
 
   /* ---- 单独字卡 tab：通讯录联系人直接列出，点击姓名即可添加 ---- */
   function renderPerTab() {
-    var html = '<div class="card-hint">单独字卡：点击联系人姓名，给 TA 添加专属字卡</div>';
+    var html = '<div class="card-hint">单独字卡：仅指定联系人回复时使用 · 其下的「自动回复」仅该联系人的自动回复场景使用</div>';
     if (!currentCid) {
       /* 通讯录所有联系人直接显示 */
       var targets = listContacts();
@@ -523,7 +551,13 @@ window.MineCards = (function () {
       } else {
         inner = '<span class="card-text">' + escapeHtml(card) + '</span>';
       }
-      return '<div class="card-item' + (isAudioCard(card) ? " is-voice" : "") + '">' + inner +
+      var sysToggle = scope === "sys"
+        ? '<button class="card-sys-toggle' + (isSysCardOn(card) ? " is-on" : "") + '" data-sys-toggle-idx="' + entry.idx + '" ' +
+          'aria-label="' + (isSysCardOn(card) ? "关闭此系统字卡" : "开启此系统字卡") + '">' +
+          (isSysCardOn(card) ? I.svg("check", 13) : '') +
+          '</button>'
+        : '';
+      return '<div class="card-item' + (isAudioCard(card) ? " is-voice" : "") + '">' + inner + sysToggle +
         '<button class="card-del" data-del-scope="' + scope + '" data-del-cid="' + (cid || "") + '" data-del-idx="' + entry.idx + '" ' +
         'aria-label="删除">' + I.svg("trash", 16) + '</button></div>';
     }).join("") + '</div>';
@@ -608,6 +642,26 @@ window.MineCards = (function () {
         var scope = btn.getAttribute("data-tool-scope");
         var cid = btn.getAttribute("data-tool-cid") || null;
         importTypeCards(scope, cid, type);
+      });
+    });
+
+    /* 系统字卡总开关：开启全部 / 关闭全部 */
+    var sysAllBtn = body.querySelector("[data-sys-all-toggle]");
+    if (sysAllBtn) {
+      sysAllBtn.addEventListener("click", function () {
+        setSysAllOn(!getSysAllOn());
+        render();
+      });
+    }
+
+    /* 单张系统字卡开关 */
+    body.querySelectorAll("[data-sys-toggle-idx]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var idx = parseInt(btn.getAttribute("data-sys-toggle-idx"), 10);
+        var card = state.sys[idx];
+        if (card === undefined) return;
+        setSysCardOn(card, !isSysCardOn(card));
+        render();
       });
     });
 
@@ -968,6 +1022,10 @@ window.MineCards = (function () {
     getPublicCards: getPublicCards,
     getPerCards: getPerCards,
     getSysCards: getSysCards,
+    getSysAllOn: getSysAllOn,
+    setSysAllOn: setSysAllOn,
+    isSysCardOn: isSysCardOn,
+    setSysCardOn: setSysCardOn,
     getAutoCards: getAutoCards,
     getReplyPool: getReplyPool,
     hasAnyCards: hasAnyCards,

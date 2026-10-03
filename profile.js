@@ -122,7 +122,7 @@ window.MineProfile = (function () {
       '<div class="func-icon">' + I.svg("me", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">我的字卡</span>' +
-        '<span class="func-sub">公用字卡所有联系人可用，单独字卡仅指定联系人使用</span>' +
+        '<span class="func-sub">公用字卡所有联系人回复可用 · 单独字卡仅指定联系人 · 自动回复用单独字卡中的自动回复</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
@@ -132,7 +132,7 @@ window.MineProfile = (function () {
       '<div class="func-icon">' + I.svg("bookmark", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">系统字卡</span>' +
-        '<span class="func-sub">所有联系人可用，发送概率可在字卡概率中修改</span>' +
+        '<span class="func-sub">系统预设字卡，可整体/单张开关，可自行添加</span>' +
       '</div>' +
       '<span class="chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
@@ -149,16 +149,17 @@ window.MineProfile = (function () {
 
     html += '<div class="list-sep"></div>';
 
-    // 概率修改
+    // 概率修改（点击展开页内分栏，不再弹窗）
     html += '<div class="group-head">概率</div>';
     html += '<div class="func-row" role="button" tabindex="0" data-act="open-probability">' +
       '<div class="func-icon">' + I.svg("sliders", 20) + '</div>' +
       '<div class="func-text">' +
         '<span class="func-title">概率修改</span>' +
-        '<span class="func-sub">自定义图片 / emoji / 语音 / 附带 emoji / 沉默等概率</span>' +
+        '<span class="func-sub">字卡概率 / 电话概率 · 0~100% 支持一位小数，立即生效</span>' +
       '</div>' +
-      '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+      '<span class="chevron" id="probs-chevron">' + I.svg("back", 18) + '</span>' +
       '</div>';
+    html += '<div id="probs-inline" class="probs-inline" hidden></div>';
 
     html += '</div>'; // .scroll
 
@@ -207,11 +208,24 @@ window.MineProfile = (function () {
       });
     }
 
-    // 概率修改入口 → 打开概率管理器
+    // 概率修改入口 → 展开 / 收起页内分栏（字卡概率 / 电话概率）
     var probBtn = pageEl.querySelector('[data-act="open-probability"]');
     if (probBtn) {
       probBtn.addEventListener("click", function () {
-        if (window.MineProbs) window.MineProbs.openManager();
+        var inline = pageEl.querySelector("#probs-inline");
+        var chevron = pageEl.querySelector("#probs-chevron");
+        if (!inline) return;
+        if (inline.hidden) {
+          inline.hidden = false;
+          if (window.MineProbs && MineProbs.renderInline) MineProbs.renderInline(inline);
+          if (chevron) chevron.classList.add("is-open");
+        } else {
+          inline.hidden = true;
+          if (chevron) chevron.classList.remove("is-open");
+        }
+      });
+      probBtn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); probBtn.click(); }
       });
     }
 

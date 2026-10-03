@@ -69,6 +69,83 @@
   text-align: right;
   letter-spacing: 0.3px;
 }
+/* 今日寄语 · 管理入口 */
+.comp-quote-manage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: var(--sp-3);
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--bd-faint);
+  background: var(--glass-2);
+  color: var(--accent);
+  font-size: 12px;
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.comp-quote-manage:active { background: var(--glass-press); transform: scale(0.97); }
+.comp-quote-manage svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+
+/* 今日寄语管理面板 */
+.quote-add-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.quote-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+.quote-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.quote-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-faint);
+}
+.quote-item-main { flex: 1; min-width: 0; }
+.quote-item-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--t-primary);
+  word-break: break-all;
+}
+.quote-item-author {
+  font-size: 12px;
+  color: var(--t-tertiary);
+  margin-top: 2px;
+}
+.quote-del {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #c97a7a;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.quote-del:active { background: rgba(180, 90, 90, 0.12); }
+.quote-del svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.quote-empty {
+  padding: var(--sp-5) var(--sp-4);
+  text-align: center;
+  font-size: 13px;
+  color: var(--t-tertiary);
+}
 
 /* ---------- bento 网格容器 ---------- */
 .comp-grid {

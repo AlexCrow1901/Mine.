@@ -683,6 +683,62 @@ input[type="range"].slider::-moz-range-thumb {
   color: var(--t-tertiary);
 }
 .card-del:active { background: var(--glass-press); }
+/* 系统字卡：单张开关 */
+.card-sys-toggle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--t-faint);
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.card-sys-toggle.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.card-sys-toggle:active { background: var(--glass-press); }
+.card-sys-toggle svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+/* 系统字卡：总开关（开启全部 / 关闭全部） */
+.sys-master-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: 0 var(--sp-5) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-faint);
+}
+.sys-master-label {
+  font-size: 13px;
+  color: var(--t-secondary);
+}
+.sys-master-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  font-size: 12px;
+  color: var(--t-secondary);
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.sys-master-toggle.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.sys-master-toggle:active { transform: scale(0.96); }
+.sys-master-toggle svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 .card-add-row {
   display: flex;
   gap: var(--sp-2);
