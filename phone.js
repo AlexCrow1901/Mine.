@@ -413,12 +413,12 @@ window.MinePhone = (function () {
     if (r < CONFIG.cardMessageChance) {
       // 字卡留言：按 buildHangupCards 规则生成一组字卡
       var cards = buildHangupCards(c);
-      msg = { cards: cards.length, voices: 0 };
+      msg = { cards: cards.length, voices: 0, cardItems: cards, voiceItems: [] };
       showCardMessage(c, cards);
     } else if (r < CONFIG.cardMessageChance + CONFIG.voiceMessageChance) {
       // 语音留言：预留（后期植入）
-      msg = { cards: 0, voices: 1 };
-      showVoiceMessage(c);
+      var v = showVoiceMessage(c);
+      msg = { cards: v.emojis.length, voices: v.voices.length || 1, cardItems: v.emojis, voiceItems: v.voices };
     } else {
       showToast("对方挂断了电话");
     }
@@ -497,13 +497,15 @@ window.MinePhone = (function () {
     return out;
   }
 
-  /* 语音留言：70% 1 条 / 20% 2 条 / 5% 3 条；每组 2% 附 1~2 个 emoji 字卡 */
+  /* 语音留言：70% 1 条 / 20% 2 条 / 5% 3 条；每组 2% 附 1~2 个 emoji 字卡
+     返回 { voices: 语音 dataURL 数组, emojis: 附赠 emoji 数组 }，供通话记录留存具体内容 */
   function showVoiceMessage(c) {
+    var result = { voices: [], emojis: [] };
     var pool = audioCardsOf(c);
     if (!pool.length) {
       showMessageSheet("语音留言", c,
         '收到一段来自雾中的语音留言。<br>该联系人还没有语音字卡，敬请期待。');
-      return;
+      return result;
     }
     var r = Math.random();
     var n = r < CONFIG.voiceMsg1Chance ? 1
@@ -511,6 +513,7 @@ window.MinePhone = (function () {
     var html = "";
     for (var i = 0; i < n; i++) {
       var src = pool[Math.floor(Math.random() * pool.length)];
+      result.voices.push(src);
       html += '<audio controls preload="none" src="' + src +
         '" style="width:100%;margin:6px 0;border-radius:10px;"></audio>';
     }
@@ -520,12 +523,15 @@ window.MinePhone = (function () {
       if (emojiPool.length) {
         var m = Math.random() < (1 - CONFIG.emojiAttach2Chance) ? 1 : 2;
         for (var j = 0; j < m; j++) {
+          var emo = emojiPool[Math.floor(Math.random() * emojiPool.length)];
+          result.emojis.push(emo);
           html += '<div style="font-size:26px;text-align:center;margin:4px 0;">' +
-            esc(emojiPool[Math.floor(Math.random() * emojiPool.length)]) + '</div>';
+            esc(emo) + '</div>';
         }
       }
     }
     showMessageSheet("语音留言", c, html);
+    return result;
   }
 
   
@@ -561,12 +567,12 @@ window.MinePhone = (function () {
       // 字卡留言：从联系人主页"自动回复字卡"中随机抽一张
       var cards = (c && c.autoCards) || [];
       var pick = cards.length ? cards[Math.floor(Math.random() * cards.length)] : null;
-      msg = { cards: pick ? 1 : 0, voices: 0 };
+      msg = { cards: pick ? 1 : 0, voices: 0, cardItems: pick ? [pick] : [], voiceItems: [] };
       showCardMessage(c, pick ? [pick] : null);
     } else if (r < CONFIG.missedCardChance + CONFIG.missedVoiceChance) {
       // 语音留言：预留（后期植入）
-      msg = { cards: 0, voices: 1 };
-      showVoiceMessage(c);
+      var v = showVoiceMessage(c);
+      msg = { cards: v.emojis.length, voices: v.voices.length || 1, cardItems: v.emojis, voiceItems: v.voices };
     } else {
       showToast("未接来电 · " + (c ? c.name : ""));
     }
@@ -840,15 +846,19 @@ window.MinePhone = (function () {
     if (!groupCall) return;
     var duration = groupCall.connectedAt
       ? Math.round((Date.now() - groupCall.connectedAt) / 1000) : 0;
-    /* 汇总挂断成员的留言（字卡 / 语音条数） */
+    /* 汇总挂断成员的留言（字卡 / 语音条数与具体内容） */
     var msg = null;
     if (groupCall.msgs && groupCall.msgs.length) {
-      var nCards = 0, nVoices = 0;
+      var nCards = 0, nVoices = 0, cardItems = [], voiceItems = [];
       groupCall.msgs.forEach(function (m) {
-        if (m.kind === "card") nCards++;
-        else if (m.kind === "voice") nVoices++;
+        if (m.kind === "card") {
+          nCards++;
+          if (m.cards && m.cards.length) cardItems = cardItems.concat(m.cards);
+        } else if (m.kind === "voice") {
+          nVoices++;
+        }
       });
-      msg = { cards: nCards, voices: nVoices };
+      msg = { cards: nCards, voices: nVoices, cardItems: cardItems, voiceItems: voiceItems };
     }
     addLog({
       type: "group", dir: "out",
@@ -1074,6 +1084,30 @@ window.MinePhone = (function () {
     return parts.length ? " · 留言 " + parts.join(" ") : "";
   }
 
+  /* 留言具体内容（字卡文字 / emoji / 图片缩略 / 语音条） */
+  function msgDetailHTML(entry) {
+    var m = entry && entry.msg;
+    if (!m) return "";
+    var html = "";
+    if (m.cardItems && m.cardItems.length) {
+      m.cardItems.forEach(function (card) {
+        if (isImageCard(card)) {
+          html += '<img class="phone-msg-img" src="' + card + '" alt="图片字卡">';
+        } else if (isEmojiCard(card)) {
+          html += '<span class="phone-msg-emoji">' + esc(card) + '</span>';
+        } else {
+          html += '<span class="phone-msg-text">' + esc(card) + '</span>';
+        }
+      });
+    }
+    if (m.voiceItems && m.voiceItems.length) {
+      m.voiceItems.forEach(function (src) {
+        html += '<audio class="phone-msg-audio" controls preload="none" src="' + src + '"></audio>';
+      });
+    }
+    return html ? '<div class="phone-msg-detail">' + html + '</div>' : "";
+  }
+
   /* 群通话记录行 */
   function groupLogRowHTML(entry) {
     var g = findGroup(entry.groupId);
@@ -1092,6 +1126,7 @@ window.MinePhone = (function () {
       '<div class="phone-log-info">' +
         '<span class="phone-log-name">' + esc(gname) + '</span>' +
         '<span class="phone-log-kind">' + kindText + msgText(entry) + '</span>' +
+        msgDetailHTML(entry) +
       '</div>' +
       '<span class="phone-log-dur">' + durText + '</span>' +
     '</div>';
@@ -1121,6 +1156,7 @@ window.MinePhone = (function () {
         '<span class="phone-log-name">' + esc(name) + '</span>' +
         '<span class="phone-log-kind' + (entry.kind === "missed" ? " is-missed" : "") + '">' +
           kindText + msgText(entry) + '</span>' +
+        msgDetailHTML(entry) +
       '</div>' +
       '<span class="phone-log-dur">' + durText + '</span>' +
     '</div>';

@@ -428,6 +428,43 @@
 
 .phone-log-hint svg { vertical-align: -2px; }
 
+/* ---------- 通话记录 · 留言具体内容 ---------- */
+.phone-msg-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 5px;
+}
+.phone-msg-text {
+  font-size: 12px;
+  color: var(--t-secondary);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-faint);
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-msg-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+.phone-msg-img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--bd-faint);
+}
+.phone-msg-audio {
+  width: 150px;
+  height: 30px;
+  border-radius: 8px;
+}
+
 /* ---------- "我的资料"编辑面板（昵称 / 头像） ---------- */
 .me-sheet-preview {
   display: flex;
