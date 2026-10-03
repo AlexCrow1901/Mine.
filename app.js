@@ -261,6 +261,10 @@
     if (window.MineTreeHole) window.MineTreeHole.init();
     // 电话模块初始化（启动联系人主动来电调度）
     if (window.MinePhone) window.MinePhone.init();
+    // 统一语音条：全局事件委托（点击播放 / 暂停）
+    if (window.MineVoiceBar && window.MineVoiceBar.initGlobal) {
+      MineVoiceBar.initGlobal();
+    }
     // ===== 注册 MineNotify provider =====
     if (window.MineNotify) {
       // chat provider 已在 chat.js 中注册

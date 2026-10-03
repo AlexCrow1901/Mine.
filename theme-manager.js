@@ -3,6 +3,7 @@
    ------------------------------------------------------------------------
    功能：
    · 主题切换（支持后期扩展更多主题）
+   · 聊天气泡样式（BUBBLES 注册表：系统可预置，后期可在设置中手动添加）
    · 主题选择面板
    · 小组件弹窗（添加小组件）
    · 编辑模式（拖拽排列、删除组件）
@@ -10,6 +11,9 @@
    · Hero 卡片读取用户资料
    ------------------------------------------------------------------------
    对外 API：MineTheme.switch(name) / getTheme() / registerTheme()
+            / applyBubble(key) / getBubble() / registerBubble()
+   气泡联动：聊天气泡、统一语音条等界面组件均使用 --bubble-* CSS 变量渲染，
+   修改气泡样式或系统主题即可全局生效。
    ======================================================================== */
 
 window.MineTheme = (function () {
@@ -53,6 +57,51 @@ window.MineTheme = (function () {
   var currentTheme = "neumorphism";
   var dom = {};
 
+  /* ====== 聊天气泡注册表（后期扩展在此追加；也可 registerBubble 运行时添加） ======
+     每个气泡样式通过 CSS 变量驱动所有界面组件：
+     · --bubble-radius     气泡圆角
+     · --bubble-tail-radius 气泡小尾巴圆角（聊天气泡专用）
+     · --bubble-them-*     对方气泡（背景 / 边框 / 文字色）
+     · --bubble-me-*       我的气泡（背景 / 边框 / 文字色）
+  */
+  var BUBBLES = [
+    {
+      key: "default",
+      name: "默认气泡",
+      desc: "雾面玻璃 · 冷调柔和",
+      vars: {
+        "--bubble-radius": "var(--r-md)",
+        "--bubble-tail-radius": "4px",
+        "--bubble-them-bg": "var(--glass-2)",
+        "--bubble-them-bd": "var(--bd-soft)",
+        "--bubble-them-color": "var(--t-primary)",
+        "--bubble-me-bg": "var(--accent-soft)",
+        "--bubble-me-bd": "var(--bd-medium)",
+        "--bubble-me-color": "var(--c-ghost)"
+      }
+    }
+    /* ---- 后续新增气泡样式示例 ----
+    {
+      key: "cream",
+      name: "奶油圆角",
+      desc: "暖白圆角 · 柔和阴影",
+      vars: {
+        "--bubble-radius": "18px",
+        "--bubble-tail-radius": "4px",
+        "--bubble-them-bg": "#f5efe6",
+        "--bubble-them-bd": "#e4d9c6",
+        "--bubble-them-color": "#3a342a",
+        "--bubble-me-bg": "#ffe9c7",
+        "--bubble-me-bd": "#f3d3a3",
+        "--bubble-me-color": "#5a4326"
+      }
+    }
+    */
+  ];
+
+  var BUBBLE_STORAGE_KEY = "mine.bubbles.v1";
+  var currentBubble = "default";
+
   /* ====== 工具函数 ====== */
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return (root || document).querySelectorAll(sel); }
@@ -67,6 +116,42 @@ window.MineTheme = (function () {
       if (THEMES[i].key === theme.key) { THEMES[i] = theme; return; }
     }
     THEMES.push(theme);
+  }
+
+  /* ====== 气泡：注册新样式（系统预置 / 手动添加均走此接口） ====== */
+  function registerBubble(bubble) {
+    if (!bubble || !bubble.key || !bubble.vars) return;
+    for (var i = 0; i < BUBBLES.length; i++) {
+      if (BUBBLES[i].key === bubble.key) { BUBBLES[i] = bubble; return; }
+    }
+    BUBBLES.push(bubble);
+  }
+
+  function getBubble() { return currentBubble; }
+
+  /* ====== 气泡：应用指定样式（把 --bubble-* 变量写到 :root） ====== */
+  function applyBubble(key) {
+    var bubble = null;
+    for (var i = 0; i < BUBBLES.length; i++) {
+      if (BUBBLES[i].key === key) { bubble = BUBBLES[i]; break; }
+    }
+    if (!bubble) return;
+    var root = document.documentElement;
+    for (var v in bubble.vars) {
+      if (bubble.vars.hasOwnProperty(v)) {
+        root.style.setProperty(v, bubble.vars[v]);
+      }
+    }
+    currentBubble = key;
+    try { localStorage.setItem(BUBBLE_STORAGE_KEY, key); } catch (e) {}
+    if (typeof onBubbleChange === "function") onBubbleChange(key);
+  }
+
+  /* ====== 气泡：加载保存的样式 ====== */
+  function loadBubble() {
+    var saved = "default";
+    try { saved = localStorage.getItem(BUBBLE_STORAGE_KEY) || "default"; } catch (e) {}
+    applyBubble(saved);
   }
 
   /* ====== 切换主题 ====== */
@@ -105,6 +190,7 @@ window.MineTheme = (function () {
   }
 
   var onThemeChange = null;
+  var onBubbleChange = null;
 
   /* ====== 加载保存的主题 ====== */
   function loadTheme() {
@@ -556,6 +642,9 @@ window.MineTheme = (function () {
     /* 加载保存的主题 */
     loadTheme();
 
+    /* 加载保存的聊天气泡样式 */
+    loadBubble();
+
     /* 初始化拖拽排序 */
     setTimeout(initDragSort, 500);
 
@@ -581,6 +670,9 @@ window.MineTheme = (function () {
     switchTheme: switchTheme,
     getTheme: getTheme,
     registerTheme: registerTheme,
+    applyBubble: applyBubble,
+    getBubble: getBubble,
+    registerBubble: registerBubble,
     enterEditMode: enterEditMode,
     exitEditMode: exitEditMode,
     toggleEditMode: toggleEditMode,

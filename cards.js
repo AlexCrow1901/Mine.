@@ -544,8 +544,7 @@ window.MineCards = (function () {
       if (isImageCard(card)) {
         inner = '<img class="card-img" src="' + escapeHtml(card) + '" alt="图片字卡">';
       } else if (isAudioCard(card)) {
-        inner = '<span class="card-voice">' + I.svg("mic", 16) + '</span>' +
-          '<audio controls preload="none" src="' + escapeHtml(card) + '"></audio>';
+        inner = MineVoiceBar.html(card, "vb-full");
       } else if (isEmojiCard(card)) {
         inner = '<span class="card-emoji">' + escapeHtml(card) + '</span>';
       } else {

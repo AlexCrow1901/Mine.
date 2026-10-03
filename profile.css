@@ -459,11 +459,6 @@
   border-radius: 8px;
   border: 1px solid var(--bd-faint);
 }
-.phone-msg-audio {
-  width: 150px;
-  height: 30px;
-  border-radius: 8px;
-}
 
 /* ---------- "我的资料"编辑面板（昵称 / 头像） ---------- */
 .me-sheet-preview {

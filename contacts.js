@@ -624,7 +624,7 @@ window.MineContacts = (function () {
       var inner = isImg
         ? '<img class="card-image-thumb" src="' + escapeHtml(text) + '" alt="图片字卡">'
         : (isAud
-          ? '<audio controls preload="none" src="' + escapeHtml(text) + '" style="width:100%;margin:4px 0;"></audio>'
+          ? MineVoiceBar.html(text, "vb-full")
           : (isEmoji
             ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
             : '<span class="card-text">' + escapeHtml(text) + '</span>'));
@@ -2075,7 +2075,7 @@ window.MineContacts = (function () {
       var inner = isImg
         ? '<img class="card-image-thumb" src="' + escapeHtml(text) + '" alt="图片字卡">'
         : (isAud
-          ? '<audio controls preload="none" src="' + escapeHtml(text) + '" style="width:100%;margin:4px 0;"></audio>'
+          ? MineVoiceBar.html(text, "vb-full")
           : (isEmoji
             ? '<span class="card-emoji">' + escapeHtml(text) + '</span>'
             : '<span class="card-text">' + escapeHtml(text) + '</span>'));

@@ -956,26 +956,26 @@
   font-size: 15px;
   line-height: 1.6;
   word-break: break-all;
-  border-radius: var(--r-md);
+  border-radius: var(--bubble-radius, var(--r-md));
   position: relative;
   white-space: normal;
 }
-/* 对方气泡 · 冷调雾面玻璃 */
+/* 对方气泡 · 冷调雾面玻璃（样式由聊天气泡变量 --bubble-* 驱动） */
 .msg-bubble.is-them {
-  background: var(--glass-2);
+  background: var(--bubble-them-bg, var(--glass-2));
   backdrop-filter: blur(var(--blur-sm)) saturate(1.2);
   -webkit-backdrop-filter: blur(var(--blur-sm)) saturate(1.2);
-  border: 1px solid var(--bd-soft);
-  color: var(--t-primary);
-  border-bottom-left-radius: 4px;
+  border: 1px solid var(--bubble-them-bd, var(--bd-soft));
+  color: var(--bubble-them-color, var(--t-primary));
+  border-bottom-left-radius: var(--bubble-tail-radius, 4px);
   box-shadow: var(--sh-float);
 }
-/* 我的气泡 · 强调色雾面 */
+/* 我的气泡 · 强调色雾面（样式由聊天气泡变量 --bubble-* 驱动） */
 .msg-bubble.is-me {
-  background: var(--accent-soft);
-  border: 1px solid var(--bd-medium);
-  color: var(--c-ghost);
-  border-bottom-right-radius: 4px;
+  background: var(--bubble-me-bg, var(--accent-soft));
+  border: 1px solid var(--bubble-me-bd, var(--bd-medium));
+  color: var(--bubble-me-color, var(--c-ghost));
+  border-bottom-right-radius: var(--bubble-tail-radius, 4px);
   box-shadow: var(--sh-soft);
 }
 
@@ -1477,9 +1477,12 @@
 .msg-bubble.is-audio-msg {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 170px;
-  padding: 8px 12px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 .msg-voice {
   display: flex;

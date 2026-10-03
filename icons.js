@@ -101,3 +101,124 @@ window.MineIcons = (function () {
 
   return { paths: paths, svg: svg };
 })();
+
+/* ========================================================================
+   Mine · 统一语音条组件（微信风格语音条）
+   ------------------------------------------------------------------------
+   用法：
+   · MineVoiceBar.html(src, cls)  → 生成语音条 HTML 字符串
+   · MineVoiceBar.initGlobal()     → 全局事件委托（启动时调用一次）
+   行为：
+   · 点击整条 播放 / 再点暂停；切换播放自动暂停前一条
+   · 波形动画 + 播放 / 暂停图标 + 时长显示（mm:ss）
+   · 外观使用聊天气泡 CSS 变量（--bubble-*），随气泡 / 系统主题联动
+   ======================================================================== */
+
+window.MineVoiceBar = (function () {
+  var currentBar = null;
+  var delegated = false;
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function setTime(bar, t, d) {
+    var el = bar.querySelector(".voice-bar-time");
+    if (!el) return;
+    el.textContent = fmt(t) + (d && d > 0 ? " / " + fmt(d) : "");
+  }
+
+  function getAudio(bar) {
+    var a = bar._audio;
+    if (a) return a;
+    a = new Audio();
+    a.preload = "metadata";
+    a.src = bar.getAttribute("data-vsrc");
+    bar._audio = a;
+    a.addEventListener("loadedmetadata", function () {
+      bar.classList.add("is-ready");
+      if (!currentBar || currentBar !== bar) setTime(bar, 0, a.duration);
+    });
+    a.addEventListener("ended", function () { stop(bar); });
+    a.addEventListener("error", function () {
+      bar.classList.remove("is-playing");
+      bar._playing = false;
+      if (currentBar === bar) currentBar = null;
+      var el = bar.querySelector(".voice-bar-time");
+      if (el) el.textContent = "无法播放";
+    });
+    return a;
+  }
+
+  function stop(bar) {
+    bar.classList.remove("is-playing");
+    bar._playing = false;
+    var a = bar._audio;
+    if (a) {
+      a.pause();
+      a.removeEventListener("timeupdate", onTime);
+      if (a.duration) setTime(bar, 0, a.duration);
+    }
+    if (currentBar === bar) currentBar = null;
+  }
+
+  function onTime() {
+    if (!currentBar) return;
+    var a = currentBar._audio;
+    if (a && a.currentTime > 0 && a.duration) {
+      setTime(currentBar, a.currentTime, a.duration);
+    }
+  }
+
+  function toggle(bar) {
+    if (currentBar && currentBar !== bar) stop(currentBar);
+    var a = getAudio(bar);
+    if (!bar._playing) {
+      var p = a.play();
+      if (p && p.then) p.catch(function () { stop(bar); });
+      bar.classList.add("is-playing");
+      bar._playing = true;
+      currentBar = bar;
+      a.addEventListener("timeupdate", onTime);
+    } else {
+      a.pause();
+      bar.classList.remove("is-playing");
+      bar._playing = false;
+      a.removeEventListener("timeupdate", onTime);
+      currentBar = null;
+    }
+  }
+
+  /* 生成语音条 HTML */
+  function html(src, cls) {
+    var I = window.MineIcons;
+    var iconPlay = (I && I.svg) ? I.svg("play", 15) : "";
+    var iconPause = (I && I.svg) ? I.svg("pause", 15) : "";
+    return '<div class="voice-bar' + (cls ? " " + cls : "") +
+           '" data-vsrc="' + String(src).replace(/"/g, "&quot;") + '">' +
+      '<span class="voice-bar-play">' +
+        '<i class="vb-play">' + iconPlay + '</i>' +
+        '<i class="vb-pause">' + iconPause + '</i>' +
+      '</span>' +
+      '<span class="voice-bar-waves"><i></i><i></i><i></i><i></i></span>' +
+      '<span class="voice-bar-time">--:--</span>' +
+    '</div>';
+  }
+
+  /* 全局事件委托（所有动态渲染的语音条均可点击播放/暂停） */
+  function initGlobal() {
+    if (delegated) return;
+    delegated = true;
+    document.addEventListener("click", function (e) {
+      var t = e.target;
+      var bar = (t && t.closest) ? t.closest(".voice-bar") : null;
+      if (!bar || !bar.getAttribute("data-vsrc")) return;
+      toggle(bar);
+    });
+  }
+
+  return { html: html, initGlobal: initGlobal };
+})();

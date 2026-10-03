@@ -947,8 +947,7 @@ window.MineChat = (function () {
     if (isImageMsg) {
       bubbleText = '<img class="msg-image" src="' + escapeHtml(msg.text) + '" alt="图片">';
     } else if (isAudioMsg) {
-      bubbleText = '<span class="msg-voice">' + I.svg("mic", 16) + '</span>' +
-        '<audio controls preload="none" src="' + escapeHtml(msg.text) + '"></audio>';
+      bubbleText = MineVoiceBar.html(msg.text, "vb-inline" + (isMe ? " is-me" : ""));
     } else if (isEmojiMsg) {
       bubbleText = '<span class="msg-emoji">' + escapeHtml(msg.text) + '</span>';
     } else if (msg.isChoice) {
@@ -1645,9 +1644,10 @@ window.MineChat = (function () {
         avatarHTML = C.groupAvatarHTML(g, 48);
         type = "group"; id = g.id;
       } else return;
-      // 图片消息在预览中显示"[图片]"
+      // 图片消息在预览中显示"[图片]"；语音消息显示"[语音]"
       var _isImg = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:image/") === 0;
-      var _preview = _isImg ? "[图片]" : lastMsg.text;
+      var _isAud = typeof lastMsg.text === "string" && lastMsg.text.indexOf("data:audio/") === 0;
+      var _preview = _isImg ? "[图片]" : (_isAud ? "[语音]" : lastMsg.text);
       convs.push({
         key: key, title: title, avatarHTML: avatarHTML,
         type: type, id: id,

@@ -514,8 +514,7 @@ window.MinePhone = (function () {
     for (var i = 0; i < n; i++) {
       var src = pool[Math.floor(Math.random() * pool.length)];
       result.voices.push(src);
-      html += '<audio controls preload="none" src="' + src +
-        '" style="width:100%;margin:6px 0;border-radius:10px;"></audio>';
+      html += MineVoiceBar.html(src, "vb-full");
     }
     // 2% 附 1~2 个 emoji 字卡
     if (Math.random() < CONFIG.emojiAttachChance) {
@@ -909,8 +908,7 @@ window.MinePhone = (function () {
       var seg = "";
       for (var i = 0; i < n; i++) {
         var src = pool[Math.floor(Math.random() * pool.length)];
-        seg += '<audio controls preload="none" src="' + src +
-          '" style="width:100%;margin:6px 0;border-radius:10px;"></audio>';
+        seg += MineVoiceBar.html(src, "vb-full");
       }
       return head + seg;
     }).join("");
@@ -1102,7 +1100,7 @@ window.MinePhone = (function () {
     }
     if (m.voiceItems && m.voiceItems.length) {
       m.voiceItems.forEach(function (src) {
-        html += '<audio class="phone-msg-audio" controls preload="none" src="' + src + '"></audio>';
+        html += MineVoiceBar.html(src, "phone-msg-audio");
       });
     }
     return html ? '<div class="phone-msg-detail">' + html + '</div>' : "";
