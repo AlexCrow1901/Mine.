@@ -45,6 +45,13 @@
   --accent-soft:   rgba(141, 157, 166, 0.22);
   --accent-glow:   rgba(141, 157, 166, 0.35);
 
+  /* ---------- 微信语音条配色（高对比 · 随主题换肤） ---------- */
+  --voicebar-them-bg:    rgba(46, 52, 56, 0.85);   /* 对方 · 深玻璃底 */
+  --voicebar-them-bd:    rgba(220, 230, 236, 0.22);/* 对方 · 边框 */
+  --voicebar-them-color: #e6ebee;                   /* 对方 · 浅色内容 */
+  --voicebar-me-bg:      #8d9da6;                   /* 我方 · 强调色实底 */
+  --voicebar-me-color:   #ffffff;                   /* 我方 · 白色内容 */
+
   /* ---------- 弥散阴影 ---------- */
   --sh-diffuse:  0 10px 40px rgba(0, 0, 0, 0.28);
   --sh-soft:     0 6px 22px rgba(0, 0, 0, 0.20);

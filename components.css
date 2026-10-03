@@ -1194,82 +1194,79 @@ input[type="range"].slider::-moz-range-thumb {
 .setting-row .setting-desc { font-size: 12px; color: var(--t-tertiary); margin-top: 2px; }
 
 /* ========================================================================
-   Mine · 统一语音条（微信风格）
+   Mine · 微信风格语音条（高对比版）
    ------------------------------------------------------------------------
-   外观完全由聊天气泡 CSS 变量（--bubble-*）与系统主题变量驱动，
-   后续修改"聊天气泡"或"系统主题"即可全局联动本组件。
+   样式：左侧小喇叭 + 波纹 · 右侧秒数时长 · 胶囊气泡；
+   播放时喇叭切换为暂停图标、波纹跳动。
+   配色使用专用 --voicebar-* 变量（theme.css / 各主题内定义），
+   我方 = 网页强调色实底 + 白字，对方 = 浅色实底 + 深字，清晰可读，
+   黑夜 / 白天主题各自适配。
    ======================================================================== */
 .voice-bar {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-width: 168px;
-  max-width: 100%;
-  padding: 8px 12px;
-  background: var(--bubble-them-bg, var(--glass-2));
-  border: 1px solid var(--bubble-them-bd, var(--bd-soft));
-  border-radius: var(--bubble-radius, var(--r-md));
-  box-shadow: var(--sh-float);
-  color: var(--bubble-them-color, var(--t-primary));
+  gap: 9px;
+  min-width: 140px;
+  max-width: 230px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  background: var(--voicebar-them-bg, var(--bubble-them-bg, var(--glass-3)));
+  border: 1px solid var(--voicebar-them-bd, var(--bubble-them-bd, var(--bd-medium)));
+  border-radius: 9px;
+  color: var(--voicebar-them-color, var(--bubble-them-color, var(--t-primary)));
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   transition: background var(--dur-fast) var(--ease-soft),
+              border-color var(--dur-fast) var(--ease-soft),
               box-shadow var(--dur-fast) var(--ease-soft);
 }
 .voice-bar:active { transform: scale(0.98); }
 .voice-bar.vb-full { width: 100%; box-sizing: border-box; }
 .voice-bar.vb-inline { margin: 4px 0; }
-/* 我方发出的语音条使用"我的气泡"变量 */
+/* 我方语音条：网页强调色实底 + 白色内容 */
 .voice-bar.is-me {
-  background: var(--bubble-me-bg, var(--accent-soft));
-  border-color: var(--bubble-me-bd, var(--bd-medium));
-  color: var(--bubble-me-color, var(--c-ghost));
-}
-.voice-bar.is-me .voice-bar-play {
-  background: var(--bubble-me-bg, var(--accent-soft));
-  border-color: var(--bubble-me-bd, var(--bd-medium));
-  color: var(--bubble-me-color, var(--c-ghost));
+  background: var(--voicebar-me-bg, var(--bubble-me-bg, var(--accent)));
+  border-color: transparent;
+  color: var(--voicebar-me-color, var(--bubble-me-color, #ffffff));
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.20);
 }
 
-/* 播放 / 暂停按钮 */
-.voice-bar-play {
+/* 左侧喇叭图标：播放时切换为暂停 */
+.voice-bar-icon {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--bd-medium);
-  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.95;
 }
-.voice-bar-play .vb-pause { display: none; }
-.voice-bar.is-playing .voice-bar-play .vb-play { display: none; }
-.voice-bar.is-playing .voice-bar-play .vb-pause { display: block; }
-.voice-bar-play svg { display: block; }
+.voice-bar-icon .vb-pause { display: none; }
+.voice-bar.is-playing .voice-bar-icon .vb-speaker { display: none; }
+.voice-bar.is-playing .voice-bar-icon .vb-pause { display: block; }
+.voice-bar-icon svg { display: block; }
 
-/* 波形条：静止短横条，播放时跳动 */
+/* 波纹条：静止清晰短条，播放时跳动 */
 .voice-bar-waves {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 3.5px;
   height: 18px;
   min-width: 44px;
 }
 .voice-bar-waves i {
   width: 3px;
-  height: 8px;
+  height: 9px;
   border-radius: 2px;
   background: currentColor;
-  opacity: 0.45;
+  opacity: 0.9;
   transition: height var(--dur-fast) var(--ease-soft);
 }
 .voice-bar.is-playing .voice-bar-waves i {
-  opacity: 0.85;
+  opacity: 1;
   animation: vb-wave 0.9s ease-in-out infinite;
 }
 .voice-bar.is-playing .voice-bar-waves i:nth-child(1) { animation-delay: 0s; }
@@ -1281,12 +1278,13 @@ input[type="range"].slider::-moz-range-thumb {
   50% { height: 17px; }
 }
 
-/* 时长 */
+/* 时长：微信格式秒数（3" / 1:05"） */
 .voice-bar-time {
   flex: 0 0 auto;
-  font-size: 11.5px;
-  color: var(--t-faint);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: inherit;
   font-variant-numeric: tabular-nums;
-  min-width: 58px;
+  min-width: 32px;
   text-align: right;
 }

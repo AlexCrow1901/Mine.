@@ -118,18 +118,29 @@ window.MineVoiceBar = (function () {
   var currentBar = null;
   var delegated = false;
 
-  function fmt(sec) {
+  /* 微信语音条时长格式：秒数 + 引号，如 3" / 1:05" */
+  function fmtDur(sec) {
     sec = Math.max(0, Math.floor(sec || 0));
-    var m = Math.floor(sec / 60);
     var s = sec % 60;
-    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    var m = Math.floor(sec / 60);
+    var str = m > 0 ? m + ":" + (s < 10 ? "0" : "") + s : String(s);
+    return str + '"';
   }
 
-  function setTime(bar, t, d) {
+  function setDur(bar, d) {
     var el = bar.querySelector(".voice-bar-time");
     if (!el) return;
-    el.textContent = fmt(t) + (d && d > 0 ? " / " + fmt(d) : "");
+    el.textContent = fmtDur(d);
   }
+
+  /* 小喇叭 + 波纹（微信语音图标），暂停图标在播放时替换 */
+  var SPEAKER_ICON =
+    '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M11 5 6 9H3v6h3l5 4V5z"/>' +
+    '<path d="M15.5 9a4 4 0 0 1 0 6"/>' +
+    '<path d="M18 6.5a8 8 0 0 1 0 11"/>' +
+    '</svg>';
 
   function getAudio(bar) {
     var a = bar._audio;
@@ -140,7 +151,7 @@ window.MineVoiceBar = (function () {
     bar._audio = a;
     a.addEventListener("loadedmetadata", function () {
       bar.classList.add("is-ready");
-      if (!currentBar || currentBar !== bar) setTime(bar, 0, a.duration);
+      setDur(bar, a.duration);
     });
     a.addEventListener("ended", function () { stop(bar); });
     a.addEventListener("error", function () {
@@ -159,18 +170,9 @@ window.MineVoiceBar = (function () {
     var a = bar._audio;
     if (a) {
       a.pause();
-      a.removeEventListener("timeupdate", onTime);
-      if (a.duration) setTime(bar, 0, a.duration);
+      if (a.duration) setDur(bar, a.duration);
     }
     if (currentBar === bar) currentBar = null;
-  }
-
-  function onTime() {
-    if (!currentBar) return;
-    var a = currentBar._audio;
-    if (a && a.currentTime > 0 && a.duration) {
-      setTime(currentBar, a.currentTime, a.duration);
-    }
   }
 
   function toggle(bar) {
@@ -182,29 +184,26 @@ window.MineVoiceBar = (function () {
       bar.classList.add("is-playing");
       bar._playing = true;
       currentBar = bar;
-      a.addEventListener("timeupdate", onTime);
     } else {
       a.pause();
       bar.classList.remove("is-playing");
       bar._playing = false;
-      a.removeEventListener("timeupdate", onTime);
       currentBar = null;
     }
   }
 
-  /* 生成语音条 HTML */
+  /* 生成微信风格语音条 HTML（左侧喇叭+波纹 · 右侧秒数） */
   function html(src, cls) {
     var I = window.MineIcons;
-    var iconPlay = (I && I.svg) ? I.svg("play", 15) : "";
     var iconPause = (I && I.svg) ? I.svg("pause", 15) : "";
     return '<div class="voice-bar' + (cls ? " " + cls : "") +
            '" data-vsrc="' + String(src).replace(/"/g, "&quot;") + '">' +
-      '<span class="voice-bar-play">' +
-        '<i class="vb-play">' + iconPlay + '</i>' +
+      '<span class="voice-bar-icon">' +
+        '<i class="vb-speaker">' + SPEAKER_ICON + '</i>' +
         '<i class="vb-pause">' + iconPause + '</i>' +
       '</span>' +
       '<span class="voice-bar-waves"><i></i><i></i><i></i><i></i></span>' +
-      '<span class="voice-bar-time">--:--</span>' +
+      '<span class="voice-bar-time">--"</span>' +
     '</div>';
   }
 

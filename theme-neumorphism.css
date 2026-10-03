@@ -48,6 +48,13 @@ body.theme-neumorphism {
   --accent-soft:   rgba(168, 152, 136, 0.18);
   --accent-glow:   rgba(168, 152, 136, 0.30);
 
+  /* ---------- 微信语音条配色（高对比 · 随主题换肤） ---------- */
+  --voicebar-them-bg:    rgba(255, 255, 255, 0.92); /* 对方 · 近白实底 */
+  --voicebar-them-bd:    rgba(160, 140, 120, 0.20); /* 对方 · 边框 */
+  --voicebar-them-color: #5A524D;                   /* 对方 · 深棕内容 */
+  --voicebar-me-bg:      #A89888;                   /* 我方 · 强调色实底 */
+  --voicebar-me-color:   #ffffff;                   /* 我方 · 白色内容 */
+
   /* ---------- 新拟态阴影变量（单侧柔和暗阴影） ---------- */
   --neu-dark:   rgba(160, 140, 120, 0.22);   /* 右下柔和暗阴影 */
   --neu-dark-2:  rgba(140, 122, 102, 0.15);
