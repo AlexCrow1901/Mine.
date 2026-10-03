@@ -101,12 +101,12 @@ window.MineFoodie = (function () {
 
   function getMyName() {
     if (window.MineProfile && MineProfile.getName) return MineProfile.getName();
-    return "雾客";
+    return "Mine";
   }
 
   function getMyAvatarHTML() {
     if (window.MineProfile && MineProfile.avatarHTML) return MineProfile.avatarHTML(44, "foodie-avatar");
-    return '<div class="foodie-avatar">雾</div>';
+    return '<div class="foodie-avatar">M</div>';
   }
 
   function getContactAvatarHTML(contact) {

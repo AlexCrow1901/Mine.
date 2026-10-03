@@ -118,7 +118,7 @@ window.MineTheme = (function () {
     if (!dom.heroContainer) return;
 
     /* 读取用户资料 */
-    var profile = { name: "雾客", avatar: null };
+    var profile = { name: "Mine", avatar: null };
     try {
       var raw = localStorage.getItem("mine.me.v1");
       if (raw) {
@@ -139,7 +139,7 @@ window.MineTheme = (function () {
       '<div class="neu-hero-avatar">' + avatarHTML + '</div>' +
       '<div class="neu-hero-info">' +
         '<div class="neu-hero-name">' + escapeHtml(profile.name) + '</div>' +
-        '<div class="neu-hero-subtitle">Lunar Wanderer</div>' +
+        '<div class="neu-hero-subtitle">Mine</div>' +
         '<div class="neu-hero-quote">She walks with moonlight in her heart, and stars in her dreams.</div>' +
       '</div>';
 
@@ -479,7 +479,7 @@ window.MineTheme = (function () {
         '<div class="neu-hero-avatar"></div>' +
         '<div class="neu-hero-info">' +
           '<div class="neu-hero-name"></div>' +
-          '<div class="neu-hero-subtitle">Lunar Wanderer</div>' +
+          '<div class="neu-hero-subtitle">Mine</div>' +
           '<div class="neu-hero-quote">She walks with moonlight in her heart, and stars in her dreams.</div>' +
         '</div>' +
       '</div>' +

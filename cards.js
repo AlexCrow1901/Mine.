@@ -404,7 +404,7 @@ window.MineCards = (function () {
   function renderAutoAddRow(cid) {
     return '<div class="card-add-row">' +
       '<input type="text" class="card-input" id="card-input-auto" ' +
-        'placeholder="输入自动回复内容或 emoji，如：我在忙，稍后回你" maxlength="60">' +
+        'placeholder="输入自动回复字卡，空格分隔批量添加 · 回车确认 · 自动去重" maxlength="500">' +
       '<button class="card-add-btn" data-add-scope="auto" data-add-cid="' + (cid || "") + '" ' +
         'data-add-type="text" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
       '</div>' +
@@ -451,14 +451,14 @@ window.MineCards = (function () {
     if (type === "text") {
       return '<div class="card-add-row">' +
         '<input type="text" class="card-input" id="card-input-text" ' +
-          'placeholder="输入字符字卡，如：今天也要开心呀" maxlength="60">' +
+          'placeholder="输入字卡，空格分隔批量添加 · 回车确认" maxlength="500">' +
         '<button class="card-add-btn" ' + data + ' data-add-type="text" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
         '</div>';
     }
     if (type === "emoji") {
       return '<div class="card-add-row">' +
         '<input type="text" class="card-input" id="card-input-emoji" ' +
-          'placeholder="输入 emoji，如 😊🌸" maxlength="12">' +
+          'placeholder="输入 emoji，空格分隔批量添加 · 回车确认" maxlength="60">' +
         '<button class="card-add-btn" ' + data + ' data-add-type="emoji" aria-label="添加">' + I.svg("plus", 18) + '</button>' +
         '</div>';
     }
@@ -523,34 +523,41 @@ window.MineCards = (function () {
       });
     });
 
-    /* 添加字符 / emoji 字卡 */
-    body.querySelectorAll("[data-add-type]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var scope = btn.getAttribute("data-add-scope");
-        var cid = btn.getAttribute("data-add-cid") || null;
-        var type = btn.getAttribute("data-add-type");
-        var input;
-        if (scope === "auto") input = body.querySelector("#card-input-auto");
-        else input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
-        var v = input ? input.value : "";
-        if (!v) { showToast("请输入字卡内容"); return; }
-        /* 批量添加：按空格拆分，自动去重 */
-        var r;
-        if (scope === "public") r = addPublicCards(v);
-        else if (scope === "sys") r = addSysCards(v);
-        else if (scope === "auto") r = addAutoCards(cid, v);
-        else r = addPerCards(cid, v);
-        if (r.added > 0 && input) input.value = "";
-        var msg = "";
-        if (r.added > 0) msg = "已添加 " + r.added + " 条";
-        if (r.skipped > 0) msg += (msg ? "，" : "") + "跳过重复 " + r.skipped + " 条";
-        if (!r.added && r.skipped > 0) msg = "字卡已存在，未重复添加";
-        if (msg) showToast(msg);
-        render();
-      });
-      btn.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { e.preventDefault(); btn.click(); }
-      });
+    /* 添加字符 / emoji 字卡（机制与通讯录联系人主页一致：
+       输入框空格分隔批量添加 + 回车确认 + 自动去重；+ 按钮点击同样生效） */
+    function doAddFromInput(btn, input) {
+      var scope = btn.getAttribute("data-add-scope");
+      var cid = btn.getAttribute("data-add-cid") || null;
+      var v = input ? input.value : "";
+      if (!v) { showToast("请输入字卡内容"); return; }
+      /* 批量添加：按空格拆分，自动去重 */
+      var r;
+      if (scope === "public") r = addPublicCards(v);
+      else if (scope === "sys") r = addSysCards(v);
+      else if (scope === "auto") r = addAutoCards(cid, v);
+      else r = addPerCards(cid, v);
+      if (r.added > 0 && input) input.value = "";
+      var msg = "";
+      if (r.added > 0) msg = "已添加 " + r.added + " 条";
+      if (r.skipped > 0) msg += (msg ? "，" : "") + "跳过重复 " + r.skipped + " 条";
+      if (!r.added && r.skipped > 0) msg = "字卡已存在，未重复添加";
+      if (msg) showToast(msg);
+      render();
+    }
+    body.querySelectorAll("[data-add-type='text'], [data-add-type='emoji']").forEach(function (btn) {
+      var scope = btn.getAttribute("data-add-scope");
+      var cid = btn.getAttribute("data-add-cid") || null;
+      var type = btn.getAttribute("data-add-type");
+      var input;
+      if (scope === "auto") input = body.querySelector("#card-input-auto");
+      else input = body.querySelector(type === "text" ? "#card-input-text" : "#card-input-emoji");
+      btn.addEventListener("click", function () { doAddFromInput(btn, input); });
+      /* 回车确认：与通讯录联系人主页「输入字卡，空格分隔批量添加 · 回车确认」一致 */
+      if (input) {
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); doAddFromInput(btn, input); }
+        });
+      }
     });
 
     /* 添加图片 / 语音字卡 */
@@ -732,7 +739,7 @@ window.MineCards = (function () {
         '</div>' +
         '<div class="card-add-row">' +
           '<input type="text" class="card-input" id="card-search-new" ' +
-            'placeholder="输入字卡内容，空格分隔可批量添加" maxlength="200">' +
+            'placeholder="输入字卡内容，空格分隔可批量添加 · 回车确认" maxlength="500">' +
           '<button class="card-add-btn" id="card-search-save" aria-label="保存">' + I.svg("check", 18) + '</button>' +
         '</div>' +
       '</div>' +
@@ -795,6 +802,13 @@ window.MineCards = (function () {
       body.querySelector("#card-search-new").value = "";
       renderSearch();
     });
+    /* 回车确认：与通讯录联系人主页机制一致 */
+    var newInput = body.querySelector("#card-search-new");
+    if (newInput) {
+      newInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+      });
+    }
   }
 
   function bindSearchList(body, items) {

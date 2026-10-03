@@ -283,6 +283,9 @@ window.MineBackground = (function () {
     state.custom.moments = url;
     try {
       if (window.MineContacts && MineContacts.getState) {
+        /* 通讯录是懒加载：未打开过通讯录页时内存为空，
+           必须先 loadData() 才能拿到联系人/群，否则聊天背景会被静默跳过 */
+        if (MineContacts.loadData) MineContacts.loadData();
         var st = MineContacts.getState();
         (st.contacts || []).forEach(function (c) {
           if (c && c.id) state.custom.contact[c.id] = url;

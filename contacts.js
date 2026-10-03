@@ -342,7 +342,7 @@ window.MineContacts = (function () {
     return '<div class="contacts-empty">' +
       '<div class="ce-icon">' + I.svg("userPlus", 26) + '</div>' +
       '<div class="ce-title">还没有联系人</div>' +
-      '<div class="ce-desc">点击右上角添加第一位雾客</div>' +
+      '<div class="ce-desc">点击右上角添加第一位联系人</div>' +
       '</div>';
   }
 

@@ -157,8 +157,8 @@
     else if (h < 22) hello = "晚安";
     else hello = "夜深了";
     if (dom.hello) {
-      // 读取"我"的昵称，回退到"雾客"
-      var myName = "雾客";
+      // 读取"我"的昵称，回退到"Mine"
+      var myName = "Mine";
       try {
         var raw = localStorage.getItem("mine.me.v1");
         if (raw) {

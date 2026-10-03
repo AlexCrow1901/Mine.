@@ -215,7 +215,7 @@ window.MineMoments = (function () {
 
   /* 获取"我"的信息 */
   function getMyInfo() {
-    var name = "雾客";
+    var name = "Mine";
     var avatar = null;
     try {
       var raw = localStorage.getItem("mine.me.v1");

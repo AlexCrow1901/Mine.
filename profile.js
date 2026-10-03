@@ -13,14 +13,14 @@ window.MineProfile = (function () {
   var U = window.MineUtils;
   var ME_KEY = "mine.me.v1";
 
-  var meProfile = { name: "雾客", avatar: null };
+  var meProfile = { name: "Mine", avatar: null };
 
   function loadMe() {
     try {
       var raw = localStorage.getItem(ME_KEY);
       if (raw) { meProfile = JSON.parse(raw); return; }
     } catch (e) {}
-    meProfile = { name: "雾客", avatar: null };
+    meProfile = { name: "Mine", avatar: null };
     saveMe();
   }
 
@@ -70,7 +70,7 @@ window.MineProfile = (function () {
       '<div class="avatar big-avatar profile-avatar" id="me-avatar" style="position:relative;">' +
         avatarInner +
       '</div>' +
-      '<span class="profile-name" id="me-name-display">' + escapeHtml(meProfile.name || "雾客") + '</span>' +
+      '<span class="profile-name" id="me-name-display">' + escapeHtml(meProfile.name || "Mine") + '</span>' +
       '<span class="profile-status">在"我的"中修改昵称与头像</span>' +
       '</div>';
 
@@ -295,7 +295,7 @@ window.MineProfile = (function () {
       '<div class="group-head">昵称</div>' +
       '<div class="me-edit-row">' +
         '<input type="text" class="field-input me-name-input" id="me-sheet-name" ' +
-          'value="' + escapeHtml(meProfile.name || "雾客") + '" ' +
+          'value="' + escapeHtml(meProfile.name || "Mine") + '" ' +
           'placeholder="输入你的昵称" maxlength="20">' +
         '<button class="btn btn-primary btn-sm" id="me-sheet-save">保存</button>' +
       '</div>' +
@@ -413,7 +413,7 @@ window.MineProfile = (function () {
     init: init,
     renderPage: renderPage,
     getProfile: function () { return meProfile; },
-    getName: function () { return meProfile.name || "雾客"; },
+    getName: function () { return meProfile.name || "Mine"; },
     avatarHTML: avatarHTML,
     loadMe: loadMe,
     saveMe: saveMe
