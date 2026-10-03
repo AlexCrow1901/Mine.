@@ -57,7 +57,7 @@ var CORE_ASSETS = [
   "contacts.js?v21",
   "cards.js?v7",
   "chat.js?v52",
-  "phone.js?v2",
+  "phone.js?v3",
   "companion.js?v9",
   "profile.js?v14",
   "mail.js?v10",
@@ -69,7 +69,7 @@ var CORE_ASSETS = [
   "contact-moments.js?v1",
   "theme-manager.js?v4",
   "files.js?v1",
-  "app.js?v14",
+  "app.js?v16",
   "sw.js"
 ];
 

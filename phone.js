@@ -110,6 +110,14 @@ window.MinePhone = (function () {
     callLog.push(entry);
     saveLog();
   }
+  /* 给刚写入的最后一条记录补充字段（挂断标记 / 留言信息等），并持久化 */
+  function updateLastLog(patch) {
+    if (!patch) return;
+    var last = callLog[callLog.length - 1];
+    if (!last) return;
+    for (var k in patch) last[k] = patch[k];
+    saveLog();
+  }
 
   /* ---------------- 当前通话状态 ---------------- */
   var active = null;     // { dir:"out"|"in", contactId, state:"ringing"|"connected", startedAt, connectedAt }
@@ -250,18 +258,18 @@ window.MinePhone = (function () {
       if (Math.random() >= CONFIG.connectedHangupChance) return;
       var c = findContact(active.contactId);
       if (active.dir === "out") {
-        endCall();
         counterpartHangup(c);
       } else {
-        endCall("对方挂断了通话");
+        var e2 = endCall("对方挂断了通话");
+        if (e2) updateLastLog({ hangup: true });
       }
     }, CONFIG.connectedHangupCheckSec * 1000));
   }
 
 
-  /* 结束通话（notice 可选，结束时弹 toast） */
+  /* 结束通话（notice 可选，结束时弹 toast）——返回本次记录 entry，供调用方补写挂断/留言信息 */
   function endCall(notice) {
-    if (!active) return;
+    if (!active) return null;
     var entry = {
       dir: active.dir,
       kind: active.state === "connected" ? "answered"
@@ -287,6 +295,7 @@ window.MinePhone = (function () {
       }
     }
     if (notice) showToast(notice);
+    return entry;
   }
 
   /* ---------------- 控件处理 ---------------- */
@@ -300,7 +309,9 @@ window.MinePhone = (function () {
       if (active.dir === "in" && active.state === "ringing") enterConnected();
     } else if (ctl === "hangup") {
       if (active.state === "ringing") {
-        endCall(active.dir === "in" ? "已拒绝来电" : "");
+        var isIn = active.dir === "in";
+        var e3 = endCall(isIn ? "已拒绝来电" : "");
+        if (e3 && isIn) updateLastLog({ declined: true });
       } else {
         endCall();
       }
@@ -396,17 +407,22 @@ window.MinePhone = (function () {
 
   /* ---------- 对方挂断：49% 字卡留言 / 49% 语音留言（预留）/ 2% 不回复 ---------- */
   function counterpartHangup(c) {
-    endCall();   // 结束并记录本次呼出（挂断）
+    var entry = endCall();   // 结束并记录本次呼出（挂断）
+    var msg = null;
     var r = Math.random();
     if (r < CONFIG.cardMessageChance) {
       // 字卡留言：按 buildHangupCards 规则生成一组字卡
-      showCardMessage(c, buildHangupCards(c));
+      var cards = buildHangupCards(c);
+      msg = { cards: cards.length, voices: 0 };
+      showCardMessage(c, cards);
     } else if (r < CONFIG.cardMessageChance + CONFIG.voiceMessageChance) {
       // 语音留言：预留（后期植入）
+      msg = { cards: 0, voices: 1 };
       showVoiceMessage(c);
     } else {
       showToast("对方挂断了电话");
     }
+    if (entry) updateLastLog({ hangup: true, msg: msg });
   }
 
 
@@ -531,7 +547,6 @@ window.MinePhone = (function () {
      // 响铃超时 → 未接（按概率附赠留言）
     timers.push(setTimeout(function () {
       if (active && active.dir === "in" && active.state === "ringing") {
-        endCall();              // 记录本次未接来电
         onMissedIncoming(c);
       }
     }, CONFIG.incomingRingSec * 1000));
@@ -539,18 +554,23 @@ window.MinePhone = (function () {
 
   /* ---------- 未接来电：49% 字卡留言 / 49% 语音留言（预留）/ 2% 不回复 ---------- */
   function onMissedIncoming(c) {
+    var entry = endCall();              // 记录本次未接来电
+    var msg = null;
     var r = Math.random();
     if (r < CONFIG.missedCardChance) {
       // 字卡留言：从联系人主页"自动回复字卡"中随机抽一张
       var cards = (c && c.autoCards) || [];
       var pick = cards.length ? cards[Math.floor(Math.random() * cards.length)] : null;
-        showCardMessage(c, pick ? [pick] : null);   
+      msg = { cards: pick ? 1 : 0, voices: 0 };
+      showCardMessage(c, pick ? [pick] : null);
     } else if (r < CONFIG.missedCardChance + CONFIG.missedVoiceChance) {
       // 语音留言：预留（后期植入）
+      msg = { cards: 0, voices: 1 };
       showVoiceMessage(c);
     } else {
       showToast("未接来电 · " + (c ? c.name : ""));
     }
+    if (entry) updateLastLog({ msg: msg });
   }
  
 
@@ -820,13 +840,24 @@ window.MinePhone = (function () {
     if (!groupCall) return;
     var duration = groupCall.connectedAt
       ? Math.round((Date.now() - groupCall.connectedAt) / 1000) : 0;
+    /* 汇总挂断成员的留言（字卡 / 语音条数） */
+    var msg = null;
+    if (groupCall.msgs && groupCall.msgs.length) {
+      var nCards = 0, nVoices = 0;
+      groupCall.msgs.forEach(function (m) {
+        if (m.kind === "card") nCards++;
+        else if (m.kind === "voice") nVoices++;
+      });
+      msg = { cards: nCards, voices: nVoices };
+    }
     addLog({
       type: "group", dir: "out",
       kind: groupCall.connectedAt ? "answered" : "canceled",
       groupId: groupCall.groupId,
       contactIds: groupCall.invitees.map(function (p) { return p.id; }),
       time: groupCall.startedAt,
-      duration: duration
+      duration: duration,
+      msg: msg
     });
     var msgs = groupCall.msgs;
     clearTimers();
@@ -1019,14 +1050,28 @@ window.MinePhone = (function () {
     }
   }
 
-  /* ==================== 电话页（Dock「电话」入口 · 通话记录） ==================== */
+  /* ==================== 电话页（主屏「电话」入口 · 通话记录） ==================== */
   function fmtLogTime(ts) {
     var d = new Date(ts);
     var now = new Date();
+    var ymd = (d.getFullYear()) + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日";
     var hm = (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" +
              (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
     if (d.toDateString() === now.toDateString()) return "今天 " + hm;
-    return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hm;
+    var yesterday = new Date(now.getTime() - 86400000);
+    if (d.toDateString() === yesterday.toDateString()) return "昨天 " + hm;
+    if (d.getFullYear() === now.getFullYear()) return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hm;
+    return ymd + " " + hm;
+  }
+
+  /* 留言信息文案：{cards:字卡条数, voices:语音条数} → "留言 字卡×2 语音×1" */
+  function msgText(entry) {
+    var m = entry && entry.msg;
+    if (!m) return "";
+    var parts = [];
+    if (m.cards > 0) parts.push("字卡×" + m.cards);
+    if (m.voices > 0) parts.push("语音×" + m.voices);
+    return parts.length ? " · 留言 " + parts.join(" ") : "";
   }
 
   /* 群通话记录行 */
@@ -1046,7 +1091,7 @@ window.MinePhone = (function () {
       '<div class="phone-log-icon">' + I.svg("users", 18) + '</div>' +
       '<div class="phone-log-info">' +
         '<span class="phone-log-name">' + esc(gname) + '</span>' +
-        '<span class="phone-log-kind">' + kindText + '</span>' +
+        '<span class="phone-log-kind">' + kindText + msgText(entry) + '</span>' +
       '</div>' +
       '<span class="phone-log-dur">' + durText + '</span>' +
     '</div>';
@@ -1058,15 +1103,24 @@ window.MinePhone = (function () {
     var name = c ? c.name : "未知";
     var iconName = entry.dir === "out" ? "phoneOut"
       : (entry.kind === "answered" ? "phoneIn" : "phoneMissed");
-    var kindText = entry.dir === "out" ? "呼出"
-      : (entry.kind === "answered" ? "呼入" : "未接");
+    var kindText;
+    if (entry.dir === "out") {
+      kindText = entry.kind === "answered"
+        ? (entry.hangup ? "呼出 · 对方挂断" : "呼出 · 已接通")
+        : (entry.hangup ? "呼出 · 对方挂断" : "呼出 · 已取消");
+    } else {
+      kindText = entry.kind === "answered"
+        ? (entry.hangup ? "呼入 · 对方挂断" : "呼入 · 已接通")
+        : (entry.declined ? "已拒绝" : "未接来电");
+    }
+    kindText += " · " + fmtLogTime(entry.time);
     var durText = entry.duration > 0 ? fmtDuration(entry.duration) : "";
     return '<div class="phone-log-row">' +
       '<div class="phone-log-icon">' + I.svg(iconName, 18) + '</div>' +
       '<div class="phone-log-info">' +
         '<span class="phone-log-name">' + esc(name) + '</span>' +
         '<span class="phone-log-kind' + (entry.kind === "missed" ? " is-missed" : "") + '">' +
-          kindText + ' · ' + fmtLogTime(entry.time) + '</span>' +
+          kindText + msgText(entry) + '</span>' +
       '</div>' +
       '<span class="phone-log-dur">' + durText + '</span>' +
     '</div>';
@@ -1082,7 +1136,7 @@ window.MinePhone = (function () {
       listHtml = '<div class="empty-state">' +
         '<div class="empty-icon">' + I.svg("phone", 28) + '</div>' +
         '<div class="empty-title">暂无通话记录</div>' +
-        '<div class="empty-desc">呼叫联系人，或等待一次来自雾中的来电。</div>' +
+        '<div class="empty-desc">呼叫联系人，或等待一次来电。</div>' +
       '</div>';
     } else {
       listHtml = rows.map(logRowHTML).join("");

@@ -14,6 +14,7 @@
      后续新增功能：在此添加条目，并实现对应 page 钩子即可。 */
   var APPS = [
     { id: "chat",       icon: "chat",       label: "聊天" },
+    { id: "phone",      icon: "phone",      label: "电话" },
     { id: "contacts",   icon: "contacts",   label: "通讯录" },
     { id: "companion",  icon: "discover",   label: "陪伴" },
     { id: "moments",    icon: "moments",    label: "朋友圈" },
