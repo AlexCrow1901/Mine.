@@ -891,6 +891,27 @@ input[type="range"].slider::-moz-range-thumb {
   flex-direction: column;
   gap: var(--sp-2);
 }
+/* 各类字卡一键导入 / 导出工具行 */
+.card-type-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: var(--sp-2);
+}
+.card-type-tool {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--bd-strong);
+  background: var(--glass-2);
+  color: var(--accent);
+  font-size: 12px;
+  transition: all var(--dur-fast) var(--ease-soft);
+}
+.card-type-tool:active { background: var(--glass-press); transform: scale(0.96); }
+.card-type-tool svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
 .cards-empty {
   padding: var(--sp-4) var(--sp-3);
   text-align: center;

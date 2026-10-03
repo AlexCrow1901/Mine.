@@ -1647,3 +1647,30 @@
 .chat-bg-btn.icon-only svg { width: 16px; height: 16px; }
 .chat-bg-btn-danger { color: #c97a7a; }
 .chat-bg-btn-danger:active { background: rgba(180, 90, 90, 0.12); }
+
+/* ============ 长按消息操作 ============ */
+.msg-row.is-longpressing .msg-bubble {
+  transform: scale(0.97);
+  background: var(--glass-press);
+}
+.msg-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.msg-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--bd-faint);
+  color: var(--t-primary);
+  font-size: 15px;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.msg-action-btn:active { background: var(--glass-press); }
+.msg-action-btn.is-danger { color: #c97a7a; }

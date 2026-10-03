@@ -12,6 +12,7 @@ window.MineFiles = (function () {
     { key: "me",       name: "个人中心",   icon: "me",        keys: ["mine.me.v1"] },
     { key: "contacts", name: "通讯录",     icon: "contacts",  keys: ["mine.contacts.v1", "mine.contacts.lastShuffle"] },
     { key: "chat",     name: "聊天",       icon: "chat",      keys: ["mine.chat.v1", "mine.chat.unread.v1", "mine.chat.bg.v1", "mine.chat.fontColor.v1", "mine.chat.choices.v1"] },
+    { key: "cards",    name: "字卡",       icon: "feather",   keys: ["mine.cards.v1"] },
     { key: "moments",  name: "朋友圈",     icon: "moments",   keys: ["mine.moments.v1", "mine.moments.cover", "mine.moments.contactInteractions"] },
     { key: "phone",    name: "通话记录",   icon: "phone",     keys: ["mine.phone.log.v1"] },
     { key: "mail",     name: "次元信箱",   icon: "mail",      keys: ["mine.mail.v1", "mine.mail.pending.v1", "mine.mail.active.v1", "mine.mail.activecheck.v1"] },
@@ -129,6 +130,77 @@ window.MineFiles = (function () {
     var single = {}; single[mod.name] = d;
     downloadJSON("mine-" + mod.key + "-" + stamp() + ".json", buildBackup(single));
     showToast("已导出「" + mod.name + "」");
+  }
+
+  /* ---------------- 导入（所有可导出项均可导入） ---------------- */
+  function openFilePicker(onRead) {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", function () {
+      var file = input.files && input.files[0];
+      document.body.removeChild(input);
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try { onRead(String(reader.result)); }
+        catch (e) { showToast("导入失败：" + (e && e.message ? e.message : "解析错误")); }
+      };
+      reader.onerror = function () { showToast("读取文件失败"); };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+  function parseBackup(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) { return { error: "文件不是有效的 JSON" }; }
+    if (!data || data.app !== "Mine" || !data.modules || typeof data.modules !== "object") {
+      return { error: "不是 Mine 备份文件（缺少 modules 字段）" };
+    }
+    return { data: data };
+  }
+  function afterImport() {
+    renderPage();
+    setTimeout(function () { location.reload(); }, 1200);
+  }
+  function importModule(mod) {
+    openFilePicker(function (text) {
+      var parsed = parseBackup(text);
+      if (parsed.error) { showToast(parsed.error); return; }
+      var entries = parsed.data.modules[mod.name] || {};
+      var applied = 0;
+      mod.keys.forEach(function (k) {
+        if (Object.prototype.hasOwnProperty.call(entries, k)) {
+          try { localStorage.setItem(k, entries[k]); applied++; } catch (e) {}
+        }
+      });
+      if (!applied) { showToast("备份中未找到「" + mod.name + "」的数据"); return; }
+      showToast("已导入「" + mod.name + "」" + applied + " 项，正在刷新…");
+      afterImport();
+    });
+  }
+  function importAll() {
+    openFilePicker(function (text) {
+      var parsed = parseBackup(text);
+      if (parsed.error) { showToast(parsed.error); return; }
+      var known = {};
+      MODULES.forEach(function (m) { m.keys.forEach(function (k) { known[k] = true; }); });
+      var applied = 0;
+      Object.keys(parsed.data.modules).forEach(function (modName) {
+        var entries = parsed.data.modules[modName];
+        if (!entries || typeof entries !== "object") return;
+        Object.keys(entries).forEach(function (k) {
+          if (modName === "其他" || known[k]) {
+            try { localStorage.setItem(k, entries[k]); applied++; } catch (e) {}
+          }
+        });
+      });
+      if (!applied) { showToast("备份中未找到可导入的数据"); return; }
+      showToast("已导入 " + applied + " 项数据，正在刷新…");
+      afterImport();
+    });
   }
 
   /* ---------------- 清除（二次确认 sheet） ---------------- */
@@ -262,6 +334,7 @@ window.MineFiles = (function () {
             '<span class="func-title">' + esc(mod.name) + '</span>' +
             '<span class="func-sub">' + sizeText + '</span>' +
           '</div>' +
+          '<button class="fs-mini-btn" data-act="import-mod" data-mod="' + mod.key + '" title="导入' + esc(mod.name) + '">' + I.svg("upload", 16) + '</button>' +
           '<button class="fs-mini-btn" data-act="export-mod" data-mod="' + mod.key + '" title="导出' + esc(mod.name) + '">' + I.svg("download", 16) + '</button>' +
           '<button class="fs-mini-btn is-danger" data-act="clear-mod" data-mod="' + mod.key + '" title="清除' + esc(mod.name) + '">' + I.svg("trash", 16) + '</button>' +
         '</div>';
@@ -290,7 +363,15 @@ window.MineFiles = (function () {
           '<span class="chevron">' + I.svg("back", 18) + '</span>' +
         '</div>' +
         '<div class="list-sep"></div>' +
-        '<div class="group-head">数据导出 · 清除</div>' +
+        '<div class="group-head">数据导入 · 导出 · 清除</div>' +
+        '<div class="func-row" data-act="import-all" style="background:rgba(150,170,190,0.10);">' +
+          '<div class="func-icon" style="color:#9fb6c9;">' + I.svg("upload", 20) + '</div>' +
+          '<div class="func-text">' +
+            '<span class="func-title">一键导入全部数据</span>' +
+            '<span class="func-sub">选择 Mine 备份 JSON，恢复下列所有模块</span>' +
+          '</div>' +
+          '<span class="chevron">' + I.svg("back", 18) + '</span>' +
+        '</div>' +
         '<div class="func-row" data-act="export-all" style="background:rgba(150,170,190,0.10);">' +
           '<div class="func-icon" style="color:#9fb6c9;">' + I.svg("download", 20) + '</div>' +
           '<div class="func-text">' +
@@ -350,6 +431,13 @@ window.MineFiles = (function () {
         if (mod) exportModule(mod);
         return;
       }
+      var importModBtn = t.closest('[data-act="import-mod"]');
+      if (importModBtn) {
+        e.stopPropagation();
+        var im = findMod(importModBtn.getAttribute("data-mod"));
+        if (im) importModule(im);
+        return;
+      }
       var clearModBtn = t.closest('[data-act="clear-mod"]');
       if (clearModBtn) {
         e.stopPropagation();
@@ -359,6 +447,8 @@ window.MineFiles = (function () {
       }
       var exportAllRow = t.closest('[data-act="export-all"]');
       if (exportAllRow) { exportAll(); return; }
+      var importAllRow = t.closest('[data-act="import-all"]');
+      if (importAllRow) { importAll(); return; }
       var persistRow = t.closest('[data-act="persist"]');
       if (persistRow) { requestPersist(); return; }
       var clearAllRow = t.closest('[data-act="clear-all"]');

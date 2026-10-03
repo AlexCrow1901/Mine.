@@ -966,7 +966,7 @@ window.MineChat = (function () {
     if (isMe && msg.read) {
       readMark = '<span class="msg-read is-read">' + I.svg("check", 13) + '</span>';
     }
-    return '<div class="' + rowClass + '">' +
+    return '<div class="' + rowClass + '" data-msg-id="' + escapeHtml(msg.id || "") + '">' +
       (isMe ? "" : avatarHTML) +
       '<div class="msg-content">' +
         senderNameHTML +
@@ -1119,6 +1119,111 @@ window.MineChat = (function () {
         MineContacts.openProfile(contactId, senderName);
       }
     });
+    /* ---------------- 长按消息 → 删除该条 / 清空聊天记录 ---------------- */
+    var lpTimer = null;
+    var lpRow = null;
+    var suppressClickUntil = 0;
+    function lpStart(e) {
+      var t = e.target;
+      var row = t && t.closest ? t.closest(".msg-row") : null;
+      if (!row) return;
+      if (lpRow === row) return;
+      lpRow = row;
+      row.classList.add("is-longpressing");
+      lpTimer = setTimeout(function () {
+        lpTimer = null;
+        row.classList.remove("is-longpressing");
+        suppressClickUntil = Date.now() + 500;  // 阻止长按后误触时间切换/头像跳转
+        showMsgActionSheet(row);
+      }, 600);
+    }
+    function lpCancel() {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (lpRow) { lpRow.classList.remove("is-longpressing"); lpRow = null; }
+    }
+    msgContainer.addEventListener("touchstart", lpStart, { passive: true });
+    msgContainer.addEventListener("touchmove", lpCancel, { passive: true });
+    msgContainer.addEventListener("touchend", lpCancel);
+    msgContainer.addEventListener("touchcancel", lpCancel);
+    msgContainer.addEventListener("mousedown", lpStart);
+    msgContainer.addEventListener("mousemove", lpCancel);
+    msgContainer.addEventListener("mouseup", lpCancel);
+    msgContainer.addEventListener("mouseleave", lpCancel);
+    msgContainer.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    // 长按后 500ms 内抑制点击类行为（时间切换 / 头像跳转）
+    msgContainer.addEventListener("click", function (e) {
+      if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    // 长按消息操作面板
+    function showMsgActionSheet(row) {
+      var id = row.getAttribute("data-msg-id") || "";
+      var msgs = conversations[ctx.convKey] || [];
+      var idx = -1;
+      for (var i = 0; i < msgs.length; i++) {
+        if (msgs[i] && msgs[i].id === id) { idx = i; break; }
+      }
+      var actions = [];
+      actions.push({
+        label: "删除这条消息",
+        danger: true,
+        fn: function () {
+          if (idx >= 0) {
+            msgs.splice(idx, 1);
+            conversations[ctx.convKey] = msgs;
+            save();
+            renderMessages();
+          }
+        }
+      });
+      actions.push({
+        label: "清空聊天记录",
+        danger: true,
+        fn: function () {
+          conversations[ctx.convKey] = [];
+          save();
+          renderMessages();
+        }
+      });
+      openMsgActionSheet("消息操作", actions);
+    }
+    // 通用底部操作面板（复用 .sheet 样式）
+    function openMsgActionSheet(title, actions) {
+      var ov = document.createElement("div");
+      ov.className = "sheet-overlay";
+      ov.innerHTML =
+        '<div class="sheet">' +
+          '<div class="sheet-handle"></div>' +
+          '<div class="sheet-head"><h2>' + escapeHtml(title) + '</h2>' +
+          '<button class="nav-btn" data-close="1">' + I.svg("close", 20) + '</button></div>' +
+          '<div class="sheet-body">' +
+            '<div class="msg-action-list">' +
+              actions.map(function (a) {
+                return '<button class="msg-action-btn' + (a.danger ? " is-danger" : "") + '" data-action="1">' +
+                  escapeHtml(a.label) + '</button>';
+              }).join("") +
+              '<button class="msg-action-btn" data-close="1">取消</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () {
+        ov.classList.add("is-open");
+        var sheet = ov.querySelector(".sheet");
+        if (sheet) sheet.classList.add("is-open");
+      });
+      function close() {
+        ov.classList.remove("is-open");
+        setTimeout(function () { ov.remove(); }, 300);
+      }
+      ov.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t === ov || (t && t.closest && t.closest("[data-close]"))) { close(); return; }
+        if (t && t.closest && t.closest("[data-action]")) {
+          var i = Array.prototype.indexOf.call(ov.querySelectorAll("[data-action]"), t.closest("[data-action]"));
+          if (i >= 0 && actions[i]) { close(); actions[i].fn(); }
+        }
+      });
+    }
     // 输入框自适应高度 + 启用发送按钮
     inputEl.addEventListener("input", function () {
       this.style.height = "auto";

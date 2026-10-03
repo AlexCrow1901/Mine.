@@ -249,6 +249,84 @@ window.MineCards = (function () {
     return [];
   }
 
+  /* ==================== 字卡一键导入 / 导出 ==================== */
+  function cardType(card) {
+    if (isImageCard(card)) return "image";
+    if (isAudioCard(card)) return "audio";
+    if (isEmojiCard(card)) return "emoji";
+    return "text";
+  }
+  function typeLabel(type) {
+    return type === "text" ? "字符" :
+      (type === "emoji" ? "emoji" :
+      (type === "image" ? "图片" :
+      (type === "audio" ? "语音" : "自动回复")));
+  }
+  function stamp2() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+  }
+  function downloadJSON(filename, obj) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+  }
+  function scopeLabel(scope, cid) {
+    if (scope === "public") return "公用";
+    if (scope === "sys") return "系统";
+    if (scope === "auto") return "自动回复";
+    return "单独";
+  }
+  function exportTypeCards(scope, cid, type) {
+    var list = listFor(scope, cid);
+    if (!list) return;
+    var cards = list.filter(function (c) { return cardType(c) === type; });
+    if (!cards.length) { showToast("该类型暂无「" + typeLabel(type) + "」字卡可导出"); return; }
+    downloadJSON("mine-cards-" + scopeLabel(scope, cid) + "-" + type + "-" + stamp2() + ".json", {
+      app: "Mine", format: 1, kind: "cards", scope: scope, cid: cid || null, type: type, cards: cards
+    });
+    showToast("已导出 " + cards.length + " 张「" + typeLabel(type) + "」字卡");
+  }
+  function importTypeCards(scope, cid, type) {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", function () {
+      var f = input.files && input.files[0];
+      document.body.removeChild(input);
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var data;
+        try { data = JSON.parse(String(reader.result)); } catch (e) { showToast("文件不是有效的 JSON"); return; }
+        var cards = Array.isArray(data) ? data : (data && Array.isArray(data.cards) ? data.cards : null);
+        if (!cards) { showToast("文件格式不符：应为字卡数组或 Mine 字卡导出文件"); return; }
+        var list = listFor(scope, cid);
+        if (!list) return;
+        var added = 0, skipped = 0;
+        cards.forEach(function (c) {
+          if (cardType(c) !== type) { skipped++; return; }
+          if (addTo(list, c)) added++; else skipped++;
+        });
+        var msg = added ? "已导入 " + added + " 张「" + typeLabel(type) + "」字卡" : "没有可导入的「" + typeLabel(type) + "」字卡";
+        if (skipped) msg += "（" + skipped + " 条无效或重复）";
+        showToast(msg);
+        render();
+      };
+      reader.onerror = function () { showToast("读取文件失败"); };
+      reader.readAsText(f);
+    });
+    input.click();
+  }
+
   /* ==================== 管理面板 ==================== */
   var sheetEl = null;
   var overlayEl = null;
@@ -383,6 +461,12 @@ window.MineCards = (function () {
         bodyHtml = renderTypeItems(g.items, scope, cid, g.type) +
           renderTypeAddRow(g.type, scope, cid);
       }
+      /* 每种类型提供一键导出 / 一键导入 */
+      var toolsHtml =
+        '<div class="card-type-tools">' +
+          '<button class="card-type-tool" data-export-type="' + g.type + '" data-tool-scope="' + scope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("download", 13) + '导出</button>' +
+          '<button class="card-type-tool" data-import-type="' + g.type + '" data-tool-scope="' + scope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("upload", 13) + '导入</button>' +
+        '</div>';
       return '<div class="card-type-section">' +
         '<button class="card-type-head" data-fold="' + g.type + '">' +
           '<span class="card-type-icon">' + I.svg(g.icon, 18) + '</span>' +
@@ -391,7 +475,7 @@ window.MineCards = (function () {
           '<span class="card-type-arrow' + (expanded ? " is-open" : "") + '">' + I.svg("back", 16) + '</span>' +
         '</button>' +
         (expanded
-          ? '<div class="card-type-body">' + bodyHtml + '</div>'
+          ? '<div class="card-type-body">' + toolsHtml + bodyHtml + '</div>'
           : '') +
         '</div>';
     }).join("") + '</div>';
@@ -506,6 +590,24 @@ window.MineCards = (function () {
         var type = btn.getAttribute("data-fold");
         expandedTypes[type] = expandedTypes[type] === false;
         render();
+      });
+    });
+
+    /* 一键导出 / 一键导入（各类字卡） */
+    body.querySelectorAll("[data-export-type]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var type = btn.getAttribute("data-export-type");
+        var scope = btn.getAttribute("data-tool-scope");
+        var cid = btn.getAttribute("data-tool-cid") || null;
+        exportTypeCards(scope, cid, type);
+      });
+    });
+    body.querySelectorAll("[data-import-type]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var type = btn.getAttribute("data-import-type");
+        var scope = btn.getAttribute("data-tool-scope");
+        var cid = btn.getAttribute("data-tool-cid") || null;
+        importTypeCards(scope, cid, type);
       });
     });
 

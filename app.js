@@ -18,7 +18,8 @@
     { id: "companion",  icon: "discover",   label: "陪伴" },
     { id: "moments",    icon: "moments",    label: "朋友圈" },
     { id: "settings",   icon: "settings",   label: "设置" },
-    { id: "weather",    icon: "weather",    label: "天气" }
+    { id: "weather",    icon: "weather",    label: "天气" },
+    { id: "browser",    icon: "browser",    label: "浏览器" }
   ];
   /* ---------------- 底部导航（微信风格：通讯录 / 陪伴 / 个人中心 / 设置） ----------------
      底部四个主 tab 常驻；聊天 / 朋友圈 / 文件等入口保留在主屏网格。 */
@@ -129,15 +130,57 @@
       '</div></div>';
     dom.detail.innerHTML = navBar + body;
     dom.detail.querySelector('[data-act="back"]').addEventListener("click", goHome);
-    switchPage("detail");
+    switchPage("detail", appId);
   }
-  function goHome() { setDockActive(""); switchPage("home"); }
-  /* ---------------- 页面切换 ---------------- */
-  function switchPage(name) {
+  function goHome() {
+    /* 智能返回：有返回栈时等价于手机返回键，回到上一个界面 */
+    if (backStack.length) {
+      try { history.back(); return; } catch (e) {}
+    }
+    setDockActive("");
+    switchPage("home");
+  }
+  /* ---------------- 页面切换 + 返回栈 ----------------
+     每次切换到不同界面：记录上一界面并 pushState；
+     手机/浏览器返回键触发 popstate → 弹出栈并还原上一界面。 */
+  var backStack = [];
+  var current = { page: "home", appId: null };
+  function pushHistory() { try { history.pushState({}, ""); } catch (e) {} }
+  function switchPage(name, appId, noRecord) {
+    if (!noRecord) {
+      var key = name + ":" + (appId || "");
+      var curKey = current.page + ":" + (current.appId || "");
+      if (key !== curKey) {
+        backStack.push({ page: current.page, appId: current.appId });
+        if (backStack.length > 60) backStack.shift();
+        pushHistory();
+      }
+    }
+    current = { page: name, appId: appId || null };
     document.querySelectorAll(".page").forEach(function (p) {
       p.classList.toggle("is-active", p.getAttribute("data-page") === name);
     });
   }
+  /* 还原上一界面：detail 页需重新渲染对应应用内容 */
+  function restoreEntry(entry) {
+    if (entry.page === "detail") {
+      if (entry.appId === "settings" && window.MineSettings) MineSettings.renderPage();
+      else if (entry.appId === "me" && window.MineProfile) MineProfile.renderPage();
+      else if (entry.appId === "phone" && window.MinePhone) MinePhone.renderPage();
+      else if (entry.appId === "files" && window.MineFiles) MineFiles.renderPage();
+      else if (entry.appId === "browser" && window.MineBrowser) MineBrowser.renderPage();
+      else if (entry.appId) openPlaceholder(entry.appId);
+      switchPage("detail", entry.appId || null, true);
+      return;
+    }
+    switchPage(entry.page, entry.appId || null, true);
+  }
+  function goBack() {
+    if (!backStack.length) { setDockActive(""); switchPage("home"); return; }
+    var entry = backStack.pop();
+    restoreEntry(entry);
+  }
+  window.addEventListener("popstate", goBack);
   /* ---------------- 状态栏时钟 ---------------- */
   function updateClock() {
     var now = new Date();
@@ -209,6 +252,8 @@
     if (window.MineBackground) window.MineBackground.init();
     // 个人中心初始化
     if (window.MineProfile) window.MineProfile.init();
+    // 字卡初始化（加载本地存储，供个人中心管理面板 / 导入导出使用）
+    if (window.MineCards) window.MineCards.init();
     // 次元信箱初始化
     if (window.MineMail) window.MineMail.init();
       // 深夜树洞初始化（启动定期检查器，处理待回复问卷）
@@ -317,27 +362,33 @@
   APP.switchPage = switchPage;
   APP.openPlaceholder = openPlaceholder;
   APP.refreshGreeting = updateGreeting;
-   // 个人中心 / 电话页 / 文件管理 / 设置页 页面钩子（链式：保存前一个 page handler）
+  APP.goBack = goBack;
+   // 个人中心 / 电话页 / 文件管理 / 设置页 / 浏览器 页面钩子（链式：保存前一个 page handler）
   var prevPage = APP.page;
   APP.page = function (id) {
     if (id === "settings" && window.MineSettings) {
       MineSettings.renderPage();
-      switchPage("detail");
+      switchPage("detail", "settings");
       return true;
     }
     if (id === "me" && window.MineProfile) {
       MineProfile.renderPage();
-      switchPage("detail");
+      switchPage("detail", "me");
       return true;
     }
     if (id === "phone" && window.MinePhone) {
       MinePhone.renderPage();
-      switchPage("detail");
+      switchPage("detail", "phone");
       return true;
     }
     if (id === "files" && window.MineFiles) {
       MineFiles.renderPage();
-      switchPage("detail");
+      switchPage("detail", "files");
+      return true;
+    }
+    if (id === "browser" && window.MineBrowser) {
+      MineBrowser.renderPage();
+      switchPage("detail", "browser");
       return true;
     }
     return prevPage ? prevPage(id) : false;

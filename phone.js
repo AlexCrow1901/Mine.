@@ -1102,7 +1102,7 @@ window.MinePhone = (function () {
     detail.querySelector('[data-act="back"]').addEventListener("click", function () {
       if (window.MineApp && MineApp.goHome) MineApp.goHome();
     });
-    if (window.MineApp && MineApp.switchPage) MineApp.switchPage("detail");
+    if (window.MineApp && MineApp.switchPage) MineApp.switchPage("detail", "phone");
   }
 
   /* ==================== 联系人主动来电调度（每小时一次，互相独立） ==================== */

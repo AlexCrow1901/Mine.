@@ -531,7 +531,7 @@ window.MineSettings = (function () {
           MineApp.page("files");
         } else if (window.MineFiles) {
           MineFiles.renderPage();
-          if (window.MineApp) MineApp.switchPage("detail");
+          if (window.MineApp) MineApp.switchPage("detail", "files");
         }
       });
     }

@@ -93,6 +93,9 @@
   align-items: center;
   gap: 9px;
 }
+.app-cell:active .app-icon {
+  transform: scale(0.92);
+}
 
 /* 页面指示点（主屏分页暗示） */
 .page-dots {
@@ -150,7 +153,7 @@
   -webkit-user-select: none;
   color: var(--t-primary);
   opacity: 0.5;
-  transition: opacity .15s ease;
+  transition: opacity .15s ease, transform .12s ease;
 }
 .dock-cell .dock-icon {
   display: flex;
@@ -172,6 +175,9 @@
 }
 .dock-cell.is-active .dock-icon {
   color: var(--t-accent, #07c160);
+}
+.dock-cell:active {
+  transform: scale(0.94);
 }
 
 /* 搜索条 · 主屏顶部下方（可选，克制存在） */
