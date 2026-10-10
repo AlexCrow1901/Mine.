@@ -95,13 +95,16 @@ window.MineCards = (function () {
       if (!state.sysOff[card]) { state.sysOff[card] = true; save(); }
     }
   }
-  /* 聊天回复使用的字卡池：单独字卡(该联系人) + 公用字卡（系统字卡由 chat.js 单独读取） */
+  /* 聊天回复使用的字卡池：单独字卡(该联系人) + 我的字卡（公用 + 系统预设已合并，
+     系统字卡由 chat.js 统一从此池随机，不再单独抽取） */
   function getReplyPool(cid) {
     var pool = [];
     if (cid && state.per[cid] && state.per[cid].length) {
       pool = pool.concat(state.per[cid]);
     }
     if (state.public.length) pool = pool.concat(state.public);
+    var sysOn = getSysCards();
+    if (sysOn.length) pool = pool.concat(sysOn);
     return pool;
   }
   function hasAnyCards() {
@@ -193,6 +196,14 @@ window.MineCards = (function () {
     save();
     return true;
   }
+  /* 按值从公用字卡池移除（生成器/字卡池删除用，幂等） */
+  function removePublicCardByValue(card) {
+    var idx = state.public.indexOf(card);
+    if (idx < 0) return false;
+    state.public.splice(idx, 1);
+    save();
+    return true;
+  }
   function addSysCard(card) {
     return addTo(state.sys, card);
   }
@@ -211,7 +222,9 @@ window.MineCards = (function () {
   function addAutoCard(cid, card) {
     if (!cid) return false;
     if (!state.autoPer[cid]) state.autoPer[cid] = [];
-    return addTo(state.autoPer[cid], card);
+    var ok = addTo(state.autoPer[cid], card);
+    if (ok) syncCardsToContact(cid, "autoCards", [card]);
+    return ok;
   }
   function addAutoCards(cid, raw) {
     if (!cid) return { added: 0, skipped: 0 };
@@ -221,14 +234,98 @@ window.MineCards = (function () {
   function removeAutoCard(cid, idx) {
     if (!cid || !state.autoPer[cid]) return false;
     if (idx < 0 || idx >= state.autoPer[cid].length) return false;
+    var removed = state.autoPer[cid][idx];
     state.autoPer[cid].splice(idx, 1);
     save();
+    removeCardFromContact(cid, "autoCards", removed);
     return true;
   }
+  /* ==================== 与联系人主页字卡的双向同步 ====================
+     联系人主页（MineContacts）维护 c.cards / c.autoCards，
+     个人中心（本模块 MineCards）维护 per[cid] / autoPer[cid]。
+     两处通过「按值同步」保持内容一致（各自排序互不影响）：
+       · 联系人主页增删字卡 → contacts.save() 调 syncContactCards() 合并到本模块
+       · 本模块增删（个人中心）→ 反向同步到联系人 c.cards / c.autoCards 并落盘
+     所有同步均为幂等操作（去重 + 存在判断），不会互相触发循环。 */
+  function syncCardsToContact(cid, target, cards) {
+    if (!cid) return;
+    try {
+      var ct = (C && C.findContact) ? C.findContact(cid) : null;
+      if (!ct) return;
+      var changed = false;
+      (cards || []).forEach(function (card) {
+        if (card === undefined || card === null) return;
+        if (!Array.isArray(ct[target]) || ct[target].indexOf(card) < 0) {
+          if (!Array.isArray(ct[target])) ct[target] = [];
+          ct[target].push(card);
+          changed = true;
+        }
+      });
+      if (changed && C && C.save) C.save();
+    } catch (e) {}
+  }
+  function removeCardFromContact(cid, target, card) {
+    if (!cid) return;
+    try {
+      var ct = (C && C.findContact) ? C.findContact(cid) : null;
+      if (!ct || !Array.isArray(ct[target])) return;
+      var idx = ct[target].indexOf(card);
+      if (idx < 0) return;
+      ct[target].splice(idx, 1);
+      if (C && C.save) C.save();
+    } catch (e) {}
+  }
+  /* 联系人主页 → 本模块：增量合并（不删除个人中心已有的字卡，幂等） */
+  function syncContactCards(cid, cards, autoCards) {
+    if (!cid) return;
+    var changed = false;
+    (cards || []).forEach(function (card) {
+      if (card === undefined || card === null) return;
+      if (!state.per[cid]) state.per[cid] = [];
+      if (state.per[cid].indexOf(card) < 0) {
+        state.per[cid].push(card);
+        changed = true;
+      }
+    });
+    if (changed) sortList(state.per[cid]);
+    var aChanged = false;
+    (autoCards || []).forEach(function (card) {
+      if (card === undefined || card === null) return;
+      if (!state.autoPer[cid]) state.autoPer[cid] = [];
+      if (state.autoPer[cid].indexOf(card) < 0) {
+        state.autoPer[cid].push(card);
+        aChanged = true;
+      }
+    });
+    if (aChanged) sortList(state.autoPer[cid]);
+    if (changed || aChanged) save();
+  }
+  /* 按值删除单独 / 自动回复字卡（供联系人主页删除同步使用，同时反向同步联系人） */
+  function removePerCardByValue(cid, card) {
+    if (!cid || !state.per[cid]) return false;
+    var idx = state.per[cid].indexOf(card);
+    if (idx < 0) return false;
+    state.per[cid].splice(idx, 1);
+    save();
+    removeCardFromContact(cid, "cards", card);
+    return true;
+  }
+  function removeAutoCardByValue(cid, card) {
+    if (!cid || !state.autoPer[cid]) return false;
+    var idx = state.autoPer[cid].indexOf(card);
+    if (idx < 0) return false;
+    state.autoPer[cid].splice(idx, 1);
+    save();
+    removeCardFromContact(cid, "autoCards", card);
+    return true;
+  }
+
   function addPerCard(cid, card) {
     if (!cid) return false;
     if (!state.per[cid]) state.per[cid] = [];
-    return addTo(state.per[cid], card);
+    var ok = addTo(state.per[cid], card);
+    if (ok) syncCardsToContact(cid, "cards", [card]);
+    return ok;
   }
   function addPerCards(cid, raw) {
     if (!cid) return { added: 0, skipped: 0 };
@@ -238,8 +335,10 @@ window.MineCards = (function () {
   function removePerCard(cid, idx) {
     if (!cid || !state.per[cid]) return false;
     if (idx < 0 || idx >= state.per[cid].length) return false;
+    var removed = state.per[cid][idx];
     state.per[cid].splice(idx, 1);
     save();
+    removeCardFromContact(cid, "cards", removed);
     return true;
   }
 
@@ -350,7 +449,7 @@ window.MineCards = (function () {
   /* ==================== 管理面板 ==================== */
   var sheetEl = null;
   var overlayEl = null;
-  var currentTab = "public";   // "public" | "per"
+  var currentTab = "mine";   // "mine"(我的字卡) | "per"(单独字卡) | "syspool"(系统字卡=审批通过池)
   var currentCid = null;       // 单独字卡当前选中的联系人
 
   function buildSheet() {
@@ -379,43 +478,72 @@ window.MineCards = (function () {
 
     var tabs =
       '<div class="card-tabs">' +
-        '<button class="card-tab' + (currentTab === "public" ? " is-active" : "") + '" data-tab="public">公用字卡</button>' +
+        '<button class="card-tab' + (currentTab === "mine" ? " is-active" : "") + '" data-tab="mine">我的字卡</button>' +
         '<button class="card-tab' + (currentTab === "per" ? " is-active" : "") + '" data-tab="per">单独字卡</button>' +
-        '<button class="card-tab' + (currentTab === "sys" ? " is-active" : "") + '" data-tab="sys">系统字卡</button>' +
+        '<button class="card-tab' + (currentTab === "syspool" ? " is-active" : "") + '" data-tab="syspool">系统字卡</button>' +
       '</div>';
 
     var content = "";
-    if (currentTab === "public") {
-      content = renderPublicTab();
+    if (currentTab === "mine") {
+      content = renderMineTab();
     } else if (currentTab === "per") {
       content = renderPerTab();
     } else {
-      content = renderSysTab();
+      content = renderSysPoolTab();
     }
 
-    body.innerHTML = tabs + content;
-    bindEvents(body);
+    /* 弹层内交互重渲染（删除/添加/tab 切换）保持滚动位置，避免跳回顶部 */
+    window.MineScroll.render(body, tabs + content, true, function () { bindEvents(body); });
   }
 
-  /* ---- 公用字卡 tab ---- */
-  function renderPublicTab() {
-    var html = '<div class="card-hint">公用字卡：所有联系人普通回复时均可使用（不用于自动回复）</div>';
-    html += renderCardEditor(state.public, "public", null);
-    return html;
-  }
-
-  /* ---- 系统字卡 tab：系统预设字卡，可整体 / 单张开关，可自行添加 ---- */
-  function renderSysTab() {
+  /* ---- 我的字卡 tab：你自行添加的字卡（公用字卡 + 系统预设字卡合并） ---- */
+  function renderMineTab() {
     var on = getSysAllOn();
     var html =
-      '<div class="card-hint">系统字卡：系统预设字卡，所有联系人回复时均可使用 · 可整体开关 / 单张开关 / 自行添加 · 发送概率可在「概率修改」中调整</div>' +
+      '<div class="card-hint">我的字卡：你自行添加的字卡（公用 + 系统预设已合并），所有联系人回复时均可使用 · 系统预设字卡可整体/单张开关 · 新增字卡进入公用池</div>' +
       '<div class="sys-master-row">' +
-        '<span class="sys-master-label">' + (on ? "系统字卡已开启" : "系统字卡已关闭") + '</span>' +
+        '<span class="sys-master-label">' + (on ? "系统预设字卡已开启" : "系统预设字卡已关闭") + '</span>' +
         '<button class="sys-master-toggle' + (on ? " is-on" : "") + '" data-sys-all-toggle aria-pressed="' + (on ? "true" : "false") + '">' +
           (on ? I.svg("close", 14) + '关闭全部' : I.svg("check", 14) + '开启全部') +
         '</button>' +
       '</div>';
-    html += renderCardEditor(state.sys, "sys", null, true);
+    /* 合并列表：元素带 src 标记来源（public / sys），删除与开关按来源定位 */
+    var merged = state.public.map(function (card, i) {
+      return { card: card, idx: i, src: "public" };
+    }).concat(state.sys.map(function (card, i) {
+      return { card: card, idx: i, src: "sys" };
+    }));
+    html += renderCardEditor(merged, "mine", null, true);
+    return html;
+  }
+
+  /* ---- 系统字卡 tab：字卡池中你审批通过的字卡（来自组字卡审批），按联系人分组、可折叠 ---- */
+  var sysPoolCollapse = {};   /* 联系人组折叠状态：默认折叠，点击组头展开 */
+  function renderSysPoolTab() {
+    var html = '<div class="card-hint">系统字卡：你审批通过的字卡（来自字卡池），联系人组卡审批通过后自动进入此处 · 按联系人分组，点击组名展开/折叠 · 删除后同时移出聊天使用</div>';
+    var pool = (window.MineCardGenerator && window.MineCardGenerator.getPool) ? window.MineCardGenerator.getPool() : [];
+    if (!pool || pool.length === 0) {
+      return html + '<div class="cm-empty">暂无审批通过的字卡</div>';
+    }
+    var byCid = {};
+    pool.forEach(function (it) {
+      var k = (it.contactId && it.contactId !== "global") ? it.contactId : "global";
+      (byCid[k] = byCid[k] || []).push(it);
+    });
+    Object.keys(byCid).forEach(function (k) {
+      var name = k === "global" ? "通用" : contactName(k);
+      var open = sysPoolCollapse[k] === true;
+      html += '<div class="group-head sp-group-head" data-sp-group="' + escapeHtml(k) + '" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">' +
+        '<span>' + escapeHtml(name) + ' · ' + byCid[k].length + ' 张</span>' +
+        '<span style="font-size:12px;color:#888;">' + (open ? '收起 ▲' : '展开 ▼') + '</span></div>';
+      if (open) {
+        html += '<div class="card-list">' + byCid[k].map(function (it) {
+          var inner = '<span class="card-text">' + escapeHtml(it.text) + '</span>';
+          return '<div class="card-item">' + inner +
+            '<button class="card-del" data-del-pool-id="' + escapeHtml(it.id) + '" aria-label="删除">' + I.svg("trash", 16) + '</button></div>';
+        }).join("") + '</div>';
+      }
+    });
     return html;
   }
 
@@ -469,8 +597,9 @@ window.MineCards = (function () {
     if (includeAudio) {
       groups.push({ type: "audio", name: "语音", icon: "mic", items: [] });
     }
-    (list || []).forEach(function (card, i) {
-      var entry = { card: card, idx: i };
+    (list || []).forEach(function (entry0, i) {
+      var card = entry0.card;
+      var entry = { card: card, idx: entry0.idx, src: entry0.src || null };
       if (isImageCard(card)) groups[2].items.push(entry);
       else if (isAudioCard(card)) {
         if (includeAudio) groups[3].items.push(entry);
@@ -489,11 +618,12 @@ window.MineCards = (function () {
         bodyHtml = renderTypeItems(g.items, scope, cid, g.type) +
           renderTypeAddRow(g.type, scope, cid);
       }
-      /* 每种类型提供一键导出 / 一键导入 */
+      /* 一键导出 / 一键导入（各类字卡）——"mine" 合并 tab 作用于公用池部分 */
+      var toolsScope = (scope === "mine") ? "public" : scope;
       var toolsHtml =
         '<div class="card-type-tools">' +
-          '<button class="card-type-tool" data-export-type="' + g.type + '" data-tool-scope="' + scope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("download", 13) + '导出</button>' +
-          '<button class="card-type-tool" data-import-type="' + g.type + '" data-tool-scope="' + scope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("upload", 13) + '导入</button>' +
+          '<button class="card-type-tool" data-export-type="' + g.type + '" data-tool-scope="' + toolsScope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("download", 13) + '导出</button>' +
+          '<button class="card-type-tool" data-import-type="' + g.type + '" data-tool-scope="' + toolsScope + '" data-tool-cid="' + (cid || "") + '">' + I.svg("upload", 13) + '导入</button>' +
         '</div>';
       return '<div class="card-type-section">' +
         '<button class="card-type-head" data-fold="' + g.type + '">' +
@@ -550,21 +680,25 @@ window.MineCards = (function () {
       } else {
         inner = '<span class="card-text">' + escapeHtml(card) + '</span>';
       }
-      var sysToggle = scope === "sys"
+      /* 系统预设字卡（来源 sys）显示开关；"mine" 合并 tab 内按 entry.src 区分删除目标 */
+      var isSysEntry = (scope === "mine" && entry.src === "sys") || scope === "sys";
+      var sysToggle = isSysEntry
         ? '<button class="card-sys-toggle' + (isSysCardOn(card) ? " is-on" : "") + '" data-sys-toggle-idx="' + entry.idx + '" ' +
-          'aria-label="' + (isSysCardOn(card) ? "关闭此系统字卡" : "开启此系统字卡") + '">' +
+          'aria-label="' + (isSysCardOn(card) ? "关闭此系统预设字卡" : "开启此系统预设字卡") + '">' +
           (isSysCardOn(card) ? I.svg("check", 13) : '') +
           '</button>'
         : '';
+      var delScope = (scope === "mine") ? entry.src : scope;
       return '<div class="card-item' + (isAudioCard(card) ? " is-voice" : "") + '">' + inner + sysToggle +
-        '<button class="card-del" data-del-scope="' + scope + '" data-del-cid="' + (cid || "") + '" data-del-idx="' + entry.idx + '" ' +
+        '<button class="card-del" data-del-scope="' + delScope + '" data-del-cid="' + (cid || "") + '" data-del-idx="' + entry.idx + '" ' +
         'aria-label="删除">' + I.svg("trash", 16) + '</button></div>';
     }).join("") + '</div>';
   }
 
   /* ---- 某类型的添加行 ---- */
   function renderTypeAddRow(type, scope, cid) {
-    var data = 'data-add-scope="' + scope + '" data-add-cid="' + (cid || "") + '"';
+    /* "mine" 合并 tab：新增字卡进入公用池 */
+    var data = 'data-add-scope="' + ((scope === "mine") ? "public" : scope) + '" data-add-cid="' + (cid || "") + '"';
     if (type === "text") {
       return '<div class="card-add-row">' +
         '<input type="text" class="card-input" id="card-input-text" ' +
@@ -678,6 +812,27 @@ window.MineCards = (function () {
       });
     });
 
+    /* 系统字卡联系人分组：点击组头展开 / 折叠 */
+    body.querySelectorAll("[data-sp-group]").forEach(function (h) {
+      h.addEventListener("click", function () {
+        var k = h.getAttribute("data-sp-group");
+        sysPoolCollapse[k] = sysPoolCollapse[k] !== true;
+        render();
+      });
+    });
+
+    /* 系统字卡（审批通过池）删除：同步移除生成器记录 + 对应字卡池 */
+    body.querySelectorAll("[data-del-pool-id]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-del-pool-id");
+        var G = window.MineCardGenerator;
+        if (!G || !G.removePoolItem) { showToast("字卡引擎未加载"); return; }
+        var r = G.removePoolItem(id);
+        showToast(r && r.ok ? ("已移除「" + r.text + "」") : "移除失败或字卡不存在");
+        render();
+      });
+    });
+
     /* 添加字符 / emoji 字卡（机制与通讯录联系人主页一致：
        输入框空格分隔批量添加 + 回车确认 + 自动去重；+ 按钮点击同样生效） */
     function doAddFromInput(btn, input) {
@@ -783,7 +938,10 @@ window.MineCards = (function () {
   }
 
   function openManager(tab) {
-    if (tab === "public" || tab === "per" || tab === "sys") currentTab = tab;
+    /* 兼容旧调用：public→mine（我的字卡），sys→syspool（系统字卡=审批通过池） */
+    if (tab === "public") tab = "mine";
+    else if (tab === "sys") tab = "syspool";
+    if (tab === "mine" || tab === "per" || tab === "syspool") currentTab = tab;
     buildSheet();
     requestAnimationFrame(function () {
       overlayEl.classList.add("is-open");
@@ -818,10 +976,19 @@ window.MineCards = (function () {
       document.body.appendChild(searchSheetEl);
       searchSheetEl.querySelector('[data-act="close"]').addEventListener("click", closeSearch);
     }
-    renderSearch();
+    /* 防御：渲染异常不得导致"点了没反应"（死按钮） */
+    try {
+      renderSearch();
+    } catch (e) {
+      console.error("[MineCards] renderSearch failed:", e);
+      var body = document.getElementById("cards-search-body");
+      if (body) body.innerHTML = '<div class="cm-empty">字卡加载失败：' + escapeHtml(String(e && e.message || e)) + '</div>';
+    }
     requestAnimationFrame(function () {
-      searchOverlayEl.classList.add("is-open");
-      searchSheetEl.classList.add("is-open");
+      if (searchOverlayEl && searchSheetEl) {
+        searchOverlayEl.classList.add("is-open");
+        searchSheetEl.classList.add("is-open");
+      }
     });
   }
   function closeSearch() {
@@ -837,7 +1004,7 @@ window.MineCards = (function () {
       out.push({ scope: "public", cid: null, idx: i, card: card, label: "公用字卡" });
     });
     state.sys.forEach(function (card, i) {
-      out.push({ scope: "sys", cid: null, idx: i, card: card, label: "系统字卡" });
+      out.push({ scope: "sys", cid: null, idx: i, card: card, label: "我的字卡 · 系统预设" });
     });
     Object.keys(state.per).forEach(function (cid) {
       (state.per[cid] || []).forEach(function (card, i) {
@@ -1037,9 +1204,12 @@ window.MineCards = (function () {
     addAutoCard: addAutoCard,
     addAutoCards: addAutoCards,
     removeAutoCard: removeAutoCard,
+    removeAutoCardByValue: removeAutoCardByValue,
     addPerCard: addPerCard,
     addPerCards: addPerCards,
     removePerCard: removePerCard,
+    removePerCardByValue: removePerCardByValue,
+    syncContactCards: syncContactCards,
     updateCard: updateCard,
     removeCardByScope: removeCardByScope,
     isImageCard: isImageCard,
